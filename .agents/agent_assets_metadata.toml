@@ -15,3 +15,17 @@ storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:3b113e60-
 storage_version_token = "1793689116193455"
 content_type = "image/png"
 source_uri = "file://attached_assets/bifrost-evidence/plugins-main.png"
+
+[[outputs]]
+id = "L3zouhXiOyCsSCvfmqCz7"
+uri = "file://plugins/fraudguard/README.md"
+type = "text"
+title = "FraudGuard README"
+description = "Full setup, demo, tests, integration notes, roadmap, and presentation guide."
+logical_id = "b71c9a08-fb24-445e-9900-fca303b3c019"
+content_hash = "sha256:d7913ef8f568a243bccc3e75996bc662837348fb997ba3d8fcd2764eebe01f9a"
+size = 16864
+mtime_ms = 1793694128622
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/b71c9a08-fb24-445e-9900-fca303b3c019/4178667d-ca64-42b6-8c38-798511f0c56e"
+storage_version_token = "1793694752724197"
+content_type = "text/markdown"
