@@ -20,6 +20,12 @@ At that commit, an LLM plugin implements `schemas.LLMPlugin`:
 
 The standalone module pins `github.com/maximhq/bifrost/core v1.14.1`, the same core module version used by upstream sibling plugins at the inspected commit. The compile-time interface assertion and plugin hook test check the adapter contract when run against that core API.
 
+## Related research context
+
+The project author states that this prototype adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The supplied document lists a filing date of 5 August 2025. The application describes a broader AI revenue-generation and transaction anti-fraud system; FraudGuard applies related behavior-scoring ideas to AI-gateway requests.
+
+This is an author-provided research reference. It is not a claim that the application has been granted, that its claims cover this plugin, or that the plugin has legal certification. The application status and the relationship between its claims and this code have not been independently verified. Presentation wording is in the separate [guide](../../PRESENTATION_GUIDE.md).
+
 ## Threat model
 
 FraudGuard is intended to help operators investigate abuse of an authenticated Bifrost virtual key when each individual request remains below a fixed rate limit. It looks for shifts relative to that key's recent history, not proof of malicious intent.

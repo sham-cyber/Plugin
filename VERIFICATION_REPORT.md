@@ -1,6 +1,7 @@
 # FraudGuard verification report
 
-**Report date:** 2026-11-03  
+**Report date:** 2026-11-03
+
 **Purpose:** Record what was inspected and tested for the FraudGuard hackathon prototype, and what has not been verified.
 
 ## 1. Problem and upstream inspection
@@ -71,3 +72,4 @@ The test suite covers benign behavior, below-rate-limit anomalies, warmup, deter
 - No latency benchmark was run; no sub-30ms target is claimed.
 - No dashboard, Redis/shared store, automatic blocking, SaaS billing, pricing, or revenue model is implemented.
 - Findings are heuristic indicators, not proof of fraud. False positives are possible and thresholds require review against representative, permissioned traffic.
+- The project author supplied an image of Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1). This report records the reference as author-provided only; it does not verify the application's legal status or whether its claims cover FraudGuard.
