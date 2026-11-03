@@ -8,7 +8,6 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 
 [Open the full FraudGuard README](plugins/fraudguard/README.md)
 
-[Open the separate presentation guide](PRESENTATION_GUIDE.md)
 [Open the verification report](VERIFICATION_REPORT.md)
 
 ## Quick start
@@ -28,6 +27,6 @@ FraudGuard is a companion module, not a built-in Bifrost HTTP-server plugin. It 
 
 It uses bounded, in-memory state. It does not use Redis, retain prompts, infer identity from IP headers, or block requests. No upstream installation, acceptance, or merge is claimed.
 
-## Related research
+## Origin
 
-The project author says this prototype adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434, published as IN202521074434 A1, titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” This is an application reference, not a claim that a patent was granted or that the filing covers this plugin. See the verification report for the limits of this reference.
+FraudGuard adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The application describes a broader system; FraudGuard is an experimental Bifrost plugin applying related behavior-scoring ideas to AI-gateway requests. This reference does not claim the application was granted or that its claims cover FraudGuard; status and claim coverage have not been independently verified.

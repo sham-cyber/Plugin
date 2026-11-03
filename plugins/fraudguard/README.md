@@ -22,9 +22,7 @@ The standalone module pins `github.com/maximhq/bifrost/core v1.14.1`, the same c
 
 ## Related research context
 
-The project author states that this prototype adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The supplied document lists a filing date of 5 August 2025. The application describes a broader AI revenue-generation and transaction anti-fraud system; FraudGuard applies related behavior-scoring ideas to AI-gateway requests.
-
-This is an author-provided research reference. It is not a claim that the application has been granted, that its claims cover this plugin, or that the plugin has legal certification. The application status and the relationship between its claims and this code have not been independently verified. Presentation wording is in the separate [guide](../../PRESENTATION_GUIDE.md).
+FraudGuard adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The application describes a broader system; this is an experimental Bifrost plugin applying related behavior-scoring ideas to AI-gateway requests. This reference does not claim the application was granted or that its claims cover FraudGuard; status and claim coverage have not been independently verified.
 
 ## Threat model
 
@@ -177,5 +175,4 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 
 ## Related documents
 
-- [Presentation guide](../../PRESENTATION_GUIDE.md) — demo script and judge questions, kept separate from this technical README.
 - [Verification report](../../VERIFICATION_REPORT.md) — pinned-source inspection, checks run, results, and limits of verification.
