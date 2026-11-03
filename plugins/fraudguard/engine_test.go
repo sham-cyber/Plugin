@@ -269,6 +269,13 @@ func TestExemptionsAndAlertThreshold(t *testing.T) {
 	}
 }
 
+func TestAlertThresholdClampsAtOneHundred(t *testing.T) {
+	engine := testEngine(t, Config{AlertThreshold: 101})
+	if engine.cfg.AlertThreshold != 100 {
+		t.Fatalf("threshold above 100 should clamp to 100, got %d", engine.cfg.AlertThreshold)
+	}
+}
+
 func TestMissingIdentityDoesNotCreateSharedProfile(t *testing.T) {
 	engine := testEngine(t, Config{})
 	handle, _ := engine.Start(Request{Provider: "openai", Model: "model-a"})

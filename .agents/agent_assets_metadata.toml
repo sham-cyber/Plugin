@@ -29,3 +29,31 @@ mtime_ms = 1793694128622
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/b71c9a08-fb24-445e-9900-fca303b3c019/4178667d-ca64-42b6-8c38-798511f0c56e"
 storage_version_token = "1793694752724197"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "augDwrMaM8a8i_E4FKXbp"
+uri = "file://PRESENTATION_GUIDE.md"
+type = "text"
+title = "FraudGuard presentation guide"
+description = "Separate demo script and simple answers to likely judge questions."
+logical_id = "995260c4-bc97-4eb6-80a1-35935c00a696"
+content_hash = "sha256:7724227aef53d7271252a3de1e0f6c1485ce87854e4e5b7f031aef1a3d8ef095"
+size = 4000
+mtime_ms = 1793696188285
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/995260c4-bc97-4eb6-80a1-35935c00a696/30e2fe22-ce37-413b-a109-a9dcbb7e5946"
+storage_version_token = "1793696252125901"
+content_type = "text/markdown"
+
+[[outputs]]
+id = "qhK7P-KB1_hjWk5YaL8Ss"
+uri = "file://VERIFICATION_REPORT.md"
+type = "text"
+title = "FraudGuard verification report"
+description = "Source inspection, exact checks run, results, and unverified items."
+logical_id = "7701ac6f-5694-4e87-ac39-fe15cdaa7cbd"
+content_hash = "sha256:879c2d5720a2e4f46f629795212c42fe899c11af19a26c4d919bb7e750726e75"
+size = 4851
+mtime_ms = 1793696197478
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/7701ac6f-5694-4e87-ac39-fe15cdaa7cbd/eb6b1bf5-ecad-4a21-9ec0-2d04b727da76"
+storage_version_token = "1793696253487099"
+content_type = "text/markdown"

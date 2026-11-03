@@ -2,11 +2,14 @@
 
 This project contains an experimental, observe-only Go plugin prototype for the Bifrost AI gateway. It looks for changes in request behavior that fixed request-count limits can miss. It reports findings; it never blocks requests.
 
-## Read the full guide
+## Project documents
 
-The complete README—including setup, demo, tests, Bifrost integration, privacy limits, roadmap, and a short presentation guide—is here:
+The technical README includes setup, demo, tests, Bifrost integration, privacy limits, and limitations:
 
 [Open the full FraudGuard README](plugins/fraudguard/README.md)
+
+[Open the separate presentation guide](PRESENTATION_GUIDE.md)  
+[Open the verification report](VERIFICATION_REPORT.md)
 
 ## Quick start
 
