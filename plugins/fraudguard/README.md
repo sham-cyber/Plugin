@@ -8,6 +8,8 @@ This code is a companion module in this Replit project. It is **not** included i
 
 The hook shape was inspected at upstream commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
 
+At that revision, Bifrost has governance budgets/rate limits and provider-failure retry key rotation, but no dedicated behavior-based fraud detector. FraudGuard targets that specific gap; it complements rather than replaces Governance.
+
 At that commit, an LLM plugin implements `schemas.LLMPlugin`:
 
 - `GetName() string`
@@ -94,6 +96,8 @@ This project is not a Bifrost source checkout, so the plugin lives as a sibling-
 2. Add the module to the app/server's Go workspace or module graph using the same approach as its other plugin modules.
 3. Construct `fraudguard.New(...)` and include the result in `schemas.BifrostConfig.LLMPlugins` when calling `core.Init`.
 
+This direct `core.Init` integration does not add FraudGuard to the upstream HTTP server's built-in plugin list. That server has its own built-in plugin loader and configuration path. Making FraudGuard a built-in would require a separate upstream integration change; no upstream files have been modified for this prototype.
+
 Minimal registration example:
 
 ```go
@@ -164,3 +168,71 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 - Cross-key correlation depends on Bifrost supplying a resolved authenticated user identity; it does not infer relationships between keys from headers or network addresses.
 - Periodic profile expiration is available via `Engine.Prune`; profile count is also bounded with oldest-profile eviction.
 - No dashboard, external AI service, database, network call, or auto-blocking behavior is included.
+
+## Hackathon presentation and next steps
+
+This section is a fact-checked guide for presenting the prototype. It separates work that exists now from work that would require another development phase.
+
+### What works today
+
+- FraudGuard implements Bifrost's LLM plugin hooks and has been checked against the pinned Bifrost core API described above.
+- The request hook records limited metadata for a resolved virtual key. The response hook uses reported token counts and success/failure status when available.
+- The engine compares recent behavior with that key's own rolling history and produces a deterministic score with named reasons.
+- The plugin is observe-only. Even when a finding meets the alert threshold, it does not reject or change the request.
+- State is local to one process and bounded. Prompts, payloads, raw credentials, and raw user identifiers are not retained.
+- The tests cover the scoring logic, privacy, concurrency, expiry, and observe-only hooks. The demo uses synthetic data and sends no network requests.
+
+### How to demonstrate it
+
+From this directory, run:
+
+```sh
+go test ./...
+go test -race ./...
+go run ./cmd/demo
+```
+
+The demo warms one virtual-key profile with regular requests, then sends a synthetic request much sooner than that key's recent pattern. It prints a `rapid_sequence` finding and aggregate metrics. With the demo's threshold, the finding is visible but is not an alert. No real model provider is called.
+
+### A short explanation for judges
+
+> Basic rate limits count requests or tokens. FraudGuard looks for changes from a virtual key's own recent behavior, such as a new model, a sudden usage increase, a rapid sequence, or repeated failures. It reports a score and reasons for an operator to review. It does not block requests or keep prompts.
+
+If asked whether this is already a Bifrost server feature, answer: **No.** It is a companion plugin module that implements Bifrost's real LLM plugin contract. It can be supplied to `core.Init` as shown above. The Bifrost HTTP server does not load it as a built-in plugin yet.
+
+### Demo script and likely questions
+
+**Show the demo**
+
+1. Run `go run ./cmd/demo`.
+2. Point to the `rapid_sequence` signal in the output.
+3. Say: “The score is 30. The alert threshold is 50, so this finding is recorded but is not an alert. The request is not blocked.”
+4. Point out that the example is synthetic and does not contact an LLM provider.
+
+**If a judge asks:**
+
+- **What is missing in Bifrost today?** “At the pinned revision, Bifrost has request/token limits and provider-failure key rotation, but no dedicated detector for changes in a virtual key's behavior.”
+- **Does this block suspicious requests?** “No. It only reports a score and reasons. Blocking is deliberately outside this prototype.”
+- **Does it store prompts or credentials?** “No. It keeps bounded behavior metadata and hashed internal IDs, not prompt or response content or raw keys.”
+- **Why is there no Redis?** “This prototype is single-process and has no network dependency. Shared state would only be a later requirement for multi-instance use.”
+- **Is it built into Bifrost's HTTP server?** “Not yet. It implements Bifrost's plugin interface and can be passed to `core.Init`. The HTTP server's built-in plugin loader needs a separate upstream integration.”
+- **Is this production-ready or a business today?** “No. It is a tested prototype. We have not run a production beta, built a dashboard, or set prices.”
+
+### Roadmap, if the community wants to continue
+
+1. **Built-in server integration (optional):** A maintainer can add FraudGuard to Bifrost's HTTP server plugin loader, configuration, and integration tests. This is registration and packaging work; the detector itself does not need to be rewritten. Direct `core.Init` use does not require this step.
+2. **False-positive review:** Test with representative, permissioned, redacted traffic metadata. Tune the warmup, rolling window, and alert threshold before relying on findings. Do not send prompts, credentials, or private logs for this work.
+3. **Operator view (optional):** If operators need it, add a dashboard that displays only the structured findings and aggregate metrics already emitted by the plugin.
+
+The current module uses in-memory, single-process state. Redis or another shared store is not part of this prototype; it should only be considered if multi-replica operation becomes a real requirement and its privacy, retention, and latency costs are reviewed. No sub-30ms latency target has been measured or promised.
+
+This is a community-oriented technical prototype, not a launched business. A dashboard, SaaS billing, prices, revenue, beta deployment, and commercial claims are not implemented or validated and should not be presented as current results.
+
+### Presenter checklist
+
+- Run the tests and synthetic demo before presenting.
+- Describe the result as an **observe-only prototype**, not a production fraud service.
+- Explain that it complements fixed rate limits; it does not replace Bifrost Governance.
+- State that thresholds can produce false positives and should be tuned with approved test traffic.
+- Be clear that multi-replica sharing and built-in HTTP server registration are future work, not current capabilities.
+- Do not claim Redis integration, request blocking, a dashboard, live provider traffic, or upstream acceptance.
