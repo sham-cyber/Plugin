@@ -1,0 +1,1 @@
+- [Bifrost Go toolchain](bifrost-go-toolchain.md) — upstream plugin modules require Go 1.27.3; this Replit environment may need explicit checksum verification to fetch it.

@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "RRZy2ss0xsT5KXW10IehK"
+uri = "file://attached_assets/bifrost-evidence/plugins-main.png"
+type = "image"
+title = "Bifrost plugin directory — pinned commit evidence"
+description = "Actual GitHub screenshot of all 12 plugin directories at main commit b84656d64490db01084cbe3d5dcd05ab5b2d098e. Supports the absence of a separately named fraud-detection plugin, not the absence of equivalent code elsewhere."
+logical_id = "5495fd18-e7bf-41ae-86ec-340b15cd7807"
+content_hash = "sha256:f256b05b1b1db35df9c69d09c708e51107ada0071e36bdf0b25f65f125fb4a4f"
+size = 67944
+mtime_ms = 1793689088243
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/conversation:3b113e60-271c-4c0a-a4c3-1d5f9627d528/5495fd18-e7bf-41ae-86ec-340b15cd7807/266d6158-5fd6-4b03-95ff-7f1e306583ca"
+storage_version_token = "1793689116193455"
+content_type = "image/png"
