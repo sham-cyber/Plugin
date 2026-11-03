@@ -28,6 +28,13 @@ type Config struct {
 	// MaxProfiles and MaxEventsPerProfile bound memory use.
 	MaxProfiles         int
 	MaxEventsPerProfile int
+	// EnableCrossKeyCorrelation opts in to grouping keys by a trusted cohort ID.
+	// Disabled by default; no cohort state is created unless explicitly enabled.
+	EnableCrossKeyCorrelation bool
+	// MaxDistinctKeysPerIdentity triggers key_rotation when exceeded (default 3, max 100).
+	MaxDistinctKeysPerIdentity int
+	// CorrelationWindow bounds the distinct-key set (defaults to Window).
+	CorrelationWindow time.Duration
 	// AlertThreshold is inclusive; findings below it remain observable but are not alerts.
 	AlertThreshold int
 	// ExemptVirtualKeyIDs contains resolved internal IDs, never credential values.
@@ -59,9 +66,12 @@ type Finding struct {
 // be Bifrost's resolved internal virtual-key ID, not a raw bearer credential.
 type Request struct {
 	VirtualKeyID string
-	Provider     string
-	Model        string
-	Timestamp    time.Time
+	// CohortID is an optional trusted, stable identity for privacy-aware key correlation.
+	// It is immediately HMACed and never retained in clear text.
+	CohortID  string
+	Provider  string
+	Model     string
+	Timestamp time.Time
 }
 
 // Completion contains request outcome metadata. It must not contain response bodies
@@ -88,6 +98,7 @@ type Assessment struct {
 // Metrics is a privacy-preserving aggregate snapshot.
 type Metrics struct {
 	Profiles       int    `json:"profiles"`
+	Cohorts        int    `json:"cohorts"`
 	Requests       uint64 `json:"requests"`
 	Findings       uint64 `json:"findings"`
 	Alerts         uint64 `json:"alerts"`
@@ -110,6 +121,12 @@ type profile struct {
 	lastSeen time.Time
 }
 
+type cohortProfile struct {
+	keys     map[string]time.Time
+	lastSeen time.Time
+	alerted  bool
+}
+
 // Engine owns the thread-safe profile store and deterministic scoring logic.
 type Engine struct {
 	mu         sync.Mutex
@@ -117,6 +134,7 @@ type Engine struct {
 	hashKey    [32]byte
 	exemptions map[string]struct{}
 	profiles   map[string]*profile
+	cohorts    map[string]*cohortProfile
 	nextID     uint64
 	metrics    Metrics
 }
@@ -134,6 +152,7 @@ func NewEngine(config Config) (*Engine, error) {
 		hashKey:    secret,
 		exemptions: make(map[string]struct{}, len(config.ExemptVirtualKeyIDs)),
 		profiles:   make(map[string]*profile),
+		cohorts:    make(map[string]*cohortProfile),
 	}
 	for _, id := range config.ExemptVirtualKeyIDs {
 		if strings.TrimSpace(id) != "" {
@@ -160,6 +179,15 @@ func withDefaults(config Config) Config {
 	}
 	if config.MaxEventsPerProfile <= 0 {
 		config.MaxEventsPerProfile = 256
+	}
+	if config.MaxDistinctKeysPerIdentity <= 0 {
+		config.MaxDistinctKeysPerIdentity = 3
+	}
+	if config.MaxDistinctKeysPerIdentity > 100 {
+		config.MaxDistinctKeysPerIdentity = 100
+	}
+	if config.CorrelationWindow <= 0 {
+		config.CorrelationWindow = config.Window
 	}
 	if config.AlertThreshold <= 0 {
 		config.AlertThreshold = 60
@@ -191,10 +219,23 @@ func (e *Engine) Start(request Request) (Handle, Assessment) {
 		e.mu.Unlock()
 		return Handle{}, Assessment{Finding: e.emptyFinding(now, false)}
 	}
+	var signals []Signal
+	if e.cfg.EnableCrossKeyCorrelation && request.CohortID != "" {
+		cohortID := e.cohortDigest(request.CohortID)
+		if e.trackCohortKeyLocked(cohortID, id, now) {
+			signals = append(signals, Signal{
+				Name:   "key_rotation",
+				Reason: "this authenticated cohort used more distinct virtual keys than configured",
+				Weight: 30,
+			})
+		}
+	}
 	p := e.getOrCreateProfileLocked(id, now)
 	e.pruneEventsLocked(p, now)
 	warmup := len(p.events) < e.cfg.WarmupRequests
-	signals := make([]Signal, 0, 3)
+	if signals == nil {
+		signals = make([]Signal, 0, 3)
+	}
 	if !warmup {
 		if !hasLabel(p.events, provider, true) && provider != "" {
 			signals = append(signals, Signal{
@@ -309,7 +350,8 @@ func (e *Engine) Complete(handle Handle, completion Completion) Assessment {
 	return Assessment{Finding: finding}
 }
 
-// Prune expires profiles that have not been observed for ProfileTTL.
+// Prune expires idle profiles and correlation cohorts. It returns the number of
+// stored records removed (profiles plus cohorts).
 func (e *Engine) Prune(now time.Time) int {
 	if now.IsZero() {
 		now = time.Now()
@@ -317,7 +359,7 @@ func (e *Engine) Prune(now time.Time) int {
 	now = now.UTC()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.pruneProfilesLocked(now)
+	return e.pruneProfilesLocked(now) + e.pruneCohortsLocked(now)
 }
 
 // Metrics returns aggregate counters without exposing individual profile identifiers.
@@ -326,13 +368,90 @@ func (e *Engine) Metrics() Metrics {
 	defer e.mu.Unlock()
 	out := e.metrics
 	out.Profiles = len(e.profiles)
+	out.Cohorts = len(e.cohorts)
 	return out
 }
 
 func (e *Engine) profileDigest(id string) string {
+	return e.digest("virtual-key", id)
+}
+
+func (e *Engine) cohortDigest(id string) string {
+	return e.digest("cohort", id)
+}
+
+func (e *Engine) digest(namespace, id string) string {
 	mac := hmac.New(sha256.New, e.hashKey[:])
+	_, _ = mac.Write([]byte(namespace))
+	_, _ = mac.Write([]byte{0})
 	_, _ = mac.Write([]byte(id))
 	return hex.EncodeToString(mac.Sum(nil))
+}
+
+func (e *Engine) trackCohortKeyLocked(cohortID, keyID string, now time.Time) bool {
+	c := e.cohorts[cohortID]
+	if c != nil && now.Sub(c.lastSeen) > e.cfg.ProfileTTL {
+		delete(e.cohorts, cohortID)
+		c = nil
+	}
+	if c == nil {
+		e.pruneCohortsLocked(now)
+		if len(e.cohorts) >= e.cfg.MaxProfiles {
+			e.evictOldestCohortLocked()
+		}
+		c = &cohortProfile{keys: make(map[string]time.Time), lastSeen: now}
+		e.cohorts[cohortID] = c
+	}
+	for id, seen := range c.keys {
+		if now.Sub(seen) > e.cfg.CorrelationWindow {
+			delete(c.keys, id)
+		}
+	}
+	newKey := false
+	if _, exists := c.keys[keyID]; !exists && len(c.keys) <= e.cfg.MaxDistinctKeysPerIdentity {
+		c.keys[keyID] = now
+		newKey = true
+	}
+	c.lastSeen = now
+	if len(c.keys) <= e.cfg.MaxDistinctKeysPerIdentity {
+		c.alerted = false
+		return false
+	}
+	if newKey && !c.alerted {
+		c.alerted = true
+		return true
+	}
+	return false
+}
+
+func (e *Engine) pruneCohortsLocked(now time.Time) int {
+	removed := 0
+	for id, c := range e.cohorts {
+		if now.Sub(c.lastSeen) > e.cfg.ProfileTTL {
+			delete(e.cohorts, id)
+			removed++
+			continue
+		}
+		for keyID, seen := range c.keys {
+			if now.Sub(seen) > e.cfg.CorrelationWindow {
+				delete(c.keys, keyID)
+			}
+		}
+	}
+	return removed
+}
+
+func (e *Engine) evictOldestCohortLocked() {
+	var oldestID string
+	var oldest time.Time
+	for id, c := range e.cohorts {
+		if oldestID == "" || c.lastSeen.Before(oldest) {
+			oldestID, oldest = id, c.lastSeen
+		}
+	}
+	if oldestID != "" {
+		delete(e.cohorts, oldestID)
+	}
 }
 
 func (e *Engine) getOrCreateProfileLocked(id string, now time.Time) *profile {

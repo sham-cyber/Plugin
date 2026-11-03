@@ -44,8 +44,13 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		return req, nil, nil
 	}
 	provider, model, _ := req.GetRequestFields()
+	cohortID := ""
+	if p.engine.cfg.EnableCrossKeyCorrelation {
+		cohortID = resolvedUserID(ctx)
+	}
 	handle, _ := p.engine.Start(Request{
 		VirtualKeyID: keyID,
+		CohortID:     cohortID,
 		Provider:     string(provider),
 		Model:        model,
 	})
@@ -53,6 +58,28 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 		ctx.SetValue(contextHandleKey{}, handle)
 	}
 	return req, nil, nil
+}
+
+// resolvedUserID uses only the settled grant identity. It deliberately does not
+// inspect request headers or fall back to a virtual-key owner that Bifrost does
+// not expose as an authenticated user identity.
+func resolvedUserID(ctx *schemas.BifrostContext) string {
+	if ctx == nil {
+		return ""
+	}
+	grant := ctx.Grant()
+	if grant == nil {
+		return ""
+	}
+	identity := grant.Identity()
+	if identity == nil {
+		return ""
+	}
+	user := identity.User()
+	if user == nil {
+		return ""
+	}
+	return user.ID
 }
 
 // PostLLMHook records normalized token totals and a boolean outcome. It never reads

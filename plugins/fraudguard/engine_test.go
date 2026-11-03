@@ -19,7 +19,17 @@ func testEngine(t *testing.T, config Config) *Engine {
 }
 
 func completedRequest(e *Engine, key, provider, model string, at time.Time, input, output int64, failed bool) (Assessment, Assessment) {
-	handle, start := e.Start(Request{VirtualKeyID: key, Provider: provider, Model: model, Timestamp: at})
+	return completedRequestWithCohort(e, key, "", provider, model, at, input, output, failed)
+}
+
+func completedRequestWithCohort(e *Engine, key, cohort, provider, model string, at time.Time, input, output int64, failed bool) (Assessment, Assessment) {
+	handle, start := e.Start(Request{
+		VirtualKeyID: key,
+		CohortID:     cohort,
+		Provider:     provider,
+		Model:        model,
+		Timestamp:    at,
+	})
 	finish := e.Complete(handle, Completion{InputTokens: input, OutputTokens: output, Failed: failed, Timestamp: at})
 	return start, finish
 }
@@ -107,7 +117,7 @@ func TestTokenSpikeAndRepeatedFailures(t *testing.T) {
 }
 
 func TestConcurrentStartAndComplete(t *testing.T) {
-	engine := testEngine(t, Config{WarmupRequests: 5, MaxProfiles: 200})
+	engine := testEngine(t, Config{WarmupRequests: 5, MaxProfiles: 200, EnableCrossKeyCorrelation: true})
 	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	var wg sync.WaitGroup
 	for i := 0; i < 24; i++ {
@@ -116,7 +126,7 @@ func TestConcurrentStartAndComplete(t *testing.T) {
 			defer wg.Done()
 			for j := 0; j < 75; j++ {
 				at := base.Add(time.Duration(i*75+j) * time.Millisecond)
-				completedRequest(engine, fmt.Sprintf("key-%d", i%4), "openai", "model-a", at, 64, 32, false)
+				completedRequestWithCohort(engine, fmt.Sprintf("key-%d", i%4), "authenticated-user", "openai", "model-a", at, 64, 32, false)
 			}
 		}(i)
 	}
@@ -125,22 +135,32 @@ func TestConcurrentStartAndComplete(t *testing.T) {
 	if metrics.Requests != 24*75 || metrics.Profiles > 4 {
 		t.Fatalf("unexpected concurrent metrics: %+v", metrics)
 	}
+	if metrics.Cohorts != 1 {
+		t.Fatalf("unexpected correlation cohort count: %+v", metrics)
+	}
 }
 
 func TestProfileExpirationAndMemoryBound(t *testing.T) {
 	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
-	engine := testEngine(t, Config{ProfileTTL: time.Minute, MaxProfiles: 2})
-	completedRequest(engine, "one", "p", "m", base, 1, 1, false)
-	completedRequest(engine, "two", "p", "m", base.Add(time.Second), 1, 1, false)
-	completedRequest(engine, "three", "p", "m", base.Add(2*time.Second), 1, 1, false)
+	engine := testEngine(t, Config{
+		ProfileTTL:                time.Minute,
+		MaxProfiles:               2,
+		EnableCrossKeyCorrelation: true,
+	})
+	completedRequestWithCohort(engine, "one", "cohort-one", "p", "m", base, 1, 1, false)
+	completedRequestWithCohort(engine, "two", "cohort-two", "p", "m", base.Add(time.Second), 1, 1, false)
+	completedRequestWithCohort(engine, "three", "cohort-three", "p", "m", base.Add(2*time.Second), 1, 1, false)
 	if got := engine.Metrics().Profiles; got != 2 {
 		t.Fatalf("profile limit not enforced: %d", got)
 	}
-	if removed := engine.Prune(base.Add(10 * time.Minute)); removed != 2 {
-		t.Fatalf("expected expired profiles pruned, got %d", removed)
+	if got := engine.Metrics().Cohorts; got != 2 {
+		t.Fatalf("cohort memory bound not enforced: %d", got)
 	}
-	if got := engine.Metrics().Profiles; got != 0 {
-		t.Fatalf("profiles remain after expiration: %d", got)
+	if removed := engine.Prune(base.Add(10 * time.Minute)); removed != 4 {
+		t.Fatalf("expected profiles and cohorts to expire, got %d records", removed)
+	}
+	if metrics := engine.Metrics(); metrics.Profiles != 0 || metrics.Cohorts != 0 {
+		t.Fatalf("state remains after expiration: %+v", metrics)
 	}
 }
 
@@ -149,20 +169,77 @@ func TestFindingsNeverContainPromptOrKey(t *testing.T) {
 	const secretKey = "PRIVATE_VIRTUAL_KEY_should_never_appear"
 	var findings []Finding
 	engine := testEngine(t, Config{
-		WarmupRequests: 1,
-		OnFinding:      func(f Finding) { findings = append(findings, f) },
+		WarmupRequests:             1,
+		EnableCrossKeyCorrelation:  true,
+		MaxDistinctKeysPerIdentity: 1,
+		OnFinding:                  func(f Finding) { findings = append(findings, f) },
 	})
 	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
-	completedRequest(engine, secretKey, "provider-a", "model-a", base, 10, 10, false)
-	completedRequest(engine, secretKey, "provider-b", "model-b", base.Add(time.Second), 10, 10, false)
+	completedRequestWithCohort(engine, secretKey, "PRIVATE_COHORT_should_never_appear", "provider-a", "model-a", base, 10, 10, false)
+	completedRequestWithCohort(engine, secretKey+"-second", "PRIVATE_COHORT_should_never_appear", "provider-b", "model-b", base.Add(time.Second), 10, 10, false)
 	encoded := fmt.Sprintf("%+v", findings)
-	if strings.Contains(encoded, prompt) || strings.Contains(encoded, secretKey) {
+	if strings.Contains(encoded, prompt) || strings.Contains(encoded, secretKey) || strings.Contains(encoded, "PRIVATE_COHORT_should_never_appear") {
 		t.Fatalf("finding leaked protected values: %s", encoded)
 	}
 	for _, finding := range findings {
 		for _, signal := range finding.Signals {
 			if strings.Contains(signal.Reason, "provider-b") || strings.Contains(signal.Reason, "model-b") {
 				t.Fatalf("finding leaked a raw model/provider label: %+v", signal)
+			}
+		}
+	}
+	for cohortID := range engine.cohorts {
+		if strings.Contains(cohortID, "PRIVATE_COHORT_should_never_appear") {
+			t.Fatal("cohort state retained a clear-text identity")
+		}
+		for keyID := range engine.cohorts[cohortID].keys {
+			if keyID == secretKey || keyID == secretKey+"-second" {
+				t.Fatal("cohort state retained a clear-text virtual-key ID")
+			}
+		}
+	}
+	for profileID := range engine.profiles {
+		if profileID == secretKey || profileID == secretKey+"-second" {
+			t.Fatal("profile state retained a clear-text virtual-key ID")
+		}
+	}
+}
+
+func TestCrossKeyCorrelationIsOptInAndHashed(t *testing.T) {
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	disabled := testEngine(t, Config{MaxDistinctKeysPerIdentity: 1})
+	completedRequestWithCohort(disabled, "vk-one", "trusted-user", "p", "m", base, 1, 1, false)
+	startDisabled, _ := completedRequestWithCohort(disabled, "vk-two", "trusted-user", "p", "m", base.Add(time.Second), 1, 1, false)
+	if containsSignal(startDisabled.Finding, "key_rotation") || disabled.Metrics().Cohorts != 0 {
+		t.Fatalf("cross-key state should be absent unless enabled: %+v", disabled.Metrics())
+	}
+
+	enabled := testEngine(t, Config{
+		WarmupRequests:             1,
+		AlertThreshold:             30,
+		EnableCrossKeyCorrelation:  true,
+		MaxDistinctKeysPerIdentity: 2,
+	})
+	for i := 0; i < 3; i++ {
+		start, _ := completedRequestWithCohort(enabled, fmt.Sprintf("vk-%d", i), "trusted-user", "p", "m", base.Add(time.Duration(i)*time.Second), 1, 1, false)
+		if i < 2 && containsSignal(start.Finding, "key_rotation") {
+			t.Fatalf("rotation signal appeared before configured limit: %+v", start.Finding)
+		}
+		if i == 2 && (!containsSignal(start.Finding, "key_rotation") || !start.Finding.Alert) {
+			t.Fatalf("expected opt-in rotation alert: %+v", start.Finding)
+		}
+	}
+	repeat, _ := completedRequestWithCohort(enabled, "vk-2", "trusted-user", "p", "m", base.Add(4*time.Second), 1, 1, false)
+	if containsSignal(repeat.Finding, "key_rotation") {
+		t.Fatalf("same key should not repeatedly raise a rotation signal: %+v", repeat.Finding)
+	}
+	for id := range enabled.cohorts {
+		if id == "trusted-user" {
+			t.Fatal("cohort ID was stored in clear text")
+		}
+		for keyID := range enabled.cohorts[id].keys {
+			if strings.HasPrefix(keyID, "vk-") {
+				t.Fatal("virtual-key ID was stored in clear text")
 			}
 		}
 	}

@@ -29,14 +29,15 @@ FraudGuard is intended to help operators investigate abuse of an authenticated B
 - Large changes in completed input/output token volume.
 - Repeated failures that dominate recent outcomes, including malformed or denied requests when those outcomes reach the plugin's post-hook.
 - Exemptions for resolved internal virtual-key IDs, applied before profile creation.
+- Excessive distinct virtual keys associated with a trusted authenticated user identity, when explicitly enabled.
 
 ### Does not detect
 
-- Whether a request is malicious, who controls a key, prompt intent, semantic abuse, account takeover, or collusion across keys.
+- Whether a request is malicious, who controls a key, prompt intent, semantic abuse, or account takeover.
 - Traffic hidden from the plugin pipeline or failures that occur before FraudGuard's pre-hook.
 - Patterns outside the in-memory rolling window or after process restart.
 - Reliable caller identity from IP headers. FraudGuard does not read IP headers and does not treat them as identity.
-- Cross-key patterns. There is no cross-key correlation in this MVP.
+- Cross-key patterns by default. Optional key-rotation correlation requires an authenticated user identity and is disabled unless explicitly configured.
 
 Findings are indicators for human review, not blocking decisions or an authorization verdict. False positives are expected for legitimate model migrations, first-time workloads, retries, batch jobs, or changing token usage.
 
@@ -44,7 +45,9 @@ Findings are indicators for human review, not blocking decisions or an authoriza
 
 - Observe-only: hooks always pass the request and response through; no automatic block path exists.
 - The plugin reads only the authenticated internal virtual-key ID from `BifrostContextKeyGovernanceVirtualKeyID`. It never falls back to `x-bf-vk` or another raw credential.
+- Optional cross-key correlation uses only the resolved `Grant.Identity().User().ID`, when Bifrost supplies one. It is separately HMACed with a namespace distinct from virtual-key IDs; it never reads IP headers or request-provided fingerprints. The signal is disabled by default.
 - The engine stores only a per-process HMAC digest of that internal ID as its map key. It stores bounded provider/model labels and token counts/timestamps for behavioral comparison; it does not store prompt, response, payload, key, request ID, or error text.
+- Correlation state stores at most the configured key limit plus one HMAC key digest per cohort, and is bounded by `MaxProfiles` and `ProfileTTL`.
 - Findings contain only timestamp, score, threshold, alert/warmup flags, and named signals with fixed reasons. They omit model/provider labels and all key identifiers.
 - The optional callback receives only those findings. Metrics are aggregate counts.
 - The default profile store is process-local and is reset on restart. Cross-process behavior requires a separately designed privacy and retention strategy and is outside this MVP.
@@ -59,9 +62,12 @@ plugin, err := fraudguard.New(fraudguard.Config{
     Window:              20 * time.Minute,
     ProfileTTL:          3 * time.Hour,
     MaxProfiles:         20_000,
-    MaxEventsPerProfile: 256,
-    AlertThreshold:      60, // inclusive score threshold from 1 through 100
-    ExemptVirtualKeyIDs: []string{"resolved-internal-vk-id"},
+    MaxEventsPerProfile:         256,
+    AlertThreshold:               60, // inclusive score threshold from 1 through 100
+    ExemptVirtualKeyIDs:          []string{"resolved-internal-vk-id"},
+    EnableCrossKeyCorrelation:    true, // opt in; default is false
+    MaxDistinctKeysPerIdentity:   3,    // alert when the limit is exceeded
+    CorrelationWindow:            10 * time.Minute,
     OnFinding: func(f fraudguard.Finding) {
         // Forward only this structured, payload-free finding to your audit pipeline.
         // Do not attach prompts, raw keys, or error strings here.
@@ -75,6 +81,10 @@ if err != nil {
 Zero or negative numeric values use the defaults: 5 warmup requests, a 15-minute rolling window, 2-hour idle profile TTL, at most 10,000 profiles, 256 events per profile, and alert threshold 60. A threshold above 100 is clamped to 100. Warmup suppresses anomaly signals until enough prior events exist.
 
 The allowlist accepts internal virtual-key **IDs**, not virtual-key secrets. IDs are HMACed at initialization and never retained in clear text by the engine. Do not populate it with bearer tokens.
+
+Cross-key correlation is off by default. When enabled, its default limit is three distinct keys and its default window matches `Window`. The Bifrost adapter uses `Grant.Identity().User().ID` only when present. Bifrost may not expose a user identity for a virtual key even when an operator considers that key assigned to a user; in that case no cross-key correlation occurs. Requests are still observed and never blocked.
+
+Direct `Engine` users may pass a `Request.CohortID`, but only from a trusted, already-authenticated identity source. Do not derive it from IP headers, request headers, prompts, or other caller-controlled fields.
 
 ## Integration
 
@@ -138,6 +148,7 @@ Signal weights add and the total is capped at 100. Signals are sorted by name fo
 | `new_model` | 25 | Model label was not observed for this key in the active history. |
 | `new_provider` | 25 | Provider label was not observed for this key in the active history. |
 | `rapid_sequence` | 30 | Current inter-request gap is under one quarter of the median prior gap and under one tenth of the configured window. |
+| `key_rotation` | 30 | An opted-in trusted cohort exceeds its distinct-key limit inside the correlation window; emitted once when the limit is crossed. |
 | `input_volume_spike` | 30 | Input tokens exceed 3x the prior mean or prior mean + 512, with at least two completed samples. |
 | `output_volume_spike` | 25 | Output tokens exceed 3x the prior mean or prior mean + 256, with at least two completed samples. |
 | `repeated_errors` | 35 | Among the last five completed outcomes, at least three fail and failures are at least 60%; the earlier retained baseline error rate must be no more than 50%. |
@@ -150,5 +161,6 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 - Model/provider distribution is represented by novelty rather than a learned statistical distribution.
 - Token counts are available only for responses that report normalized usage. Missing usage cannot produce token-spike signals.
 - Failed requests observed before a response contribute to the error signal only if Bifrost runs this plugin's post-hook for that request.
+- Cross-key correlation depends on Bifrost supplying a resolved authenticated user identity; it does not infer relationships between keys from headers or network addresses.
 - Periodic profile expiration is available via `Engine.Prune`; profile count is also bounded with oldest-profile eviction.
 - No dashboard, external AI service, database, network call, or auto-blocking behavior is included.
