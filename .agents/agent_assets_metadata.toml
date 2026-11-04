@@ -71,3 +71,17 @@ mtime_ms = 1793697504345
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/0f03f2e0-f1e7-42ac-9a0e-ba7e91404adf/6139ae20-64ae-47b8-8c83-87e5672e5dc9"
 storage_version_token = "1793697537661805"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "7p_0V-4LtflmOu2340B4H"
+uri = "file://.local/outputs/FraudGuard-Hackathon-Deck.pptx"
+type = "slides"
+title = "FraudGuard Hackathon Deck (PPTX)"
+description = "Editable PowerPoint export of the five-slide FraudGuard hackathon deck."
+logical_id = "922a1f24-c117-41d7-9496-6ed315042c2a"
+content_hash = "sha256:f4cf09dfd2821d2f0b256d3cd82612c579f7d29e64c76c0ae7d1d9818d8b8eac"
+size = 873656
+mtime_ms = 1793756134956
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/922a1f24-c117-41d7-9496-6ed315042c2a/004bbcf3-9920-47fe-a52f-8549a46aeb00"
+storage_version_token = "1793756137072280"
+content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"

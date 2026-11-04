@@ -1,0 +1,28 @@
+kind = "slides"
+previewPath = "/"
+title = "FraudGuard Hackathon Deck"
+description = "An editable five-slide presentation explaining FraudGuard's behavior-based abuse signals, Bifrost compatibility, validation, privacy, and prototype limits."
+version = "1.0.0"
+id = "artifacts/fraudguard-pitch-deck"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 25273
+
+[services.development]
+run = "pnpm --filter @workspace/fraudguard-pitch-deck run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/fraudguard-pitch-deck", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/fraudguard-pitch-deck/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "25273"
+BASE_PATH = "/"

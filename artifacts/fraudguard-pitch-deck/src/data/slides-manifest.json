@@ -1,0 +1,42 @@
+[
+  {
+    "id": "736b0d34-4c82-444a-8085-61f40ebb0f36",
+    "position": 1,
+    "filepath": "src/pages/slides/Cover.tsx",
+    "title": "FraudGuard",
+    "description": "Behavior-based abuse signals for AI gateways",
+    "speakerNotes": ""
+  },
+  {
+    "id": "2c366f0f-861c-43b5-b3b3-41d1efe9dc8a",
+    "position": 2,
+    "filepath": "src/pages/slides/BehaviorGap.tsx",
+    "title": "Request counts can miss behavior changes",
+    "description": "Limits versus behavior changes",
+    "speakerNotes": ""
+  },
+  {
+    "id": "a063e514-39a5-4a56-9bcf-e7a20b6a90c3",
+    "position": 3,
+    "filepath": "src/pages/slides/Baseline.tsx",
+    "title": "Build a baseline, score deviations",
+    "description": "Per-key baselines and observe-only scoring",
+    "speakerNotes": ""
+  },
+  {
+    "id": "cd8b573e-4616-4350-8b75-f1b9b2770b8b",
+    "position": 4,
+    "filepath": "src/pages/slides/Evidence.tsx",
+    "title": "Evidence with privacy built in",
+    "description": "Privacy safeguards, tests, and demo output",
+    "speakerNotes": ""
+  },
+  {
+    "id": "aafc88ca-854b-47ac-8a48-fa824094d329",
+    "position": 5,
+    "filepath": "src/pages/slides/PrototypeStatus.tsx",
+    "title": "A tested plugin prototype—not a built-in feature",
+    "description": "Compatibility boundaries and research reference",
+    "speakerNotes": ""
+  }
+]
