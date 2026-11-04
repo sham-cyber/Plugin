@@ -63,6 +63,8 @@ It uses bounded, in-memory state. It does not use Redis, retain prompts, infer i
 ## Future Scope (Not Implemented)
 
 > Proposed trusted integrations: payment velocity/location and key status (expired/revoked/exposed). The automatic Bifrost request path remains request-behavior only and observe-only.
+>
+> Hardening TODO: 1) Wire real trusted payment/key sources 2) Deduplicate retried payments via idempotency ID
 
 The companion module includes opt-in evaluators for these signals, but no live payment-provider, location, or credential-status source is connected to Bifrost. A host must explicitly call `RecordPayment` for a transaction attempt or attach trusted credential status. These paths only report findings. Track the trusted-source integration proposal in [GitHub Issue #1](https://github.com/sham-cyber/Plugin/issues/1).
 
