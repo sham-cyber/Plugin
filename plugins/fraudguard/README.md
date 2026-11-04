@@ -36,6 +36,9 @@ FraudGuard is intended to help operators investigate abuse of an authenticated B
 - Repeated failures that dominate recent outcomes, including malformed or denied requests when those outcomes reach the plugin's post-hook.
 - Exemptions for resolved internal virtual-key IDs, applied before profile creation.
 - Excessive distinct virtual keys associated with a trusted authenticated user identity, when explicitly enabled.
+- Payment-event velocity when enabled and a host integration calls `RecordPayment` for each transaction attempt.
+- A new coarse payment country after warmup when enabled; the country must come from a trusted payment source.
+- Expired, revoked, and exposed key-status signals, each independently enabled and supplied by trusted authentication or credential-management code.
 
 ### Does not detect
 
@@ -44,6 +47,8 @@ FraudGuard is intended to help operators investigate abuse of an authenticated B
 - Patterns outside the in-memory rolling window or after process restart.
 - Reliable caller identity from IP headers. FraudGuard does not read IP headers and does not treat them as identity.
 - Cross-key patterns by default. Optional key-rotation correlation requires an authenticated user identity and is disabled unless explicitly configured.
+- Payment transactions or payment location automatically. The host must send trusted events; Bifrost's LLM request hook does not provide them.
+- Whether a key is expired, revoked, or exposed automatically. The host must supply those status results; FraudGuard does not query a key registry or scan for leaked credentials.
 
 Findings are indicators for human review, not blocking decisions or an authorization verdict. False positives are expected for legitimate model migrations, first-time workloads, retries, batch jobs, or changing token usage.
 
@@ -53,6 +58,8 @@ Findings are indicators for human review, not blocking decisions or an authoriza
 - The plugin reads only the authenticated internal virtual-key ID from `BifrostContextKeyGovernanceVirtualKeyID`. It never falls back to `x-bf-vk` or another raw credential.
 - Optional cross-key correlation uses only the resolved `Grant.Identity().User().ID`, when Bifrost supplies one. It is separately HMACed with a namespace distinct from virtual-key IDs; it never reads IP headers or request-provided fingerprints. The signal is disabled by default.
 - The engine stores only a per-process HMAC digest of that internal ID as its map key. It stores bounded provider/model labels and token counts/timestamps for behavioral comparison; it does not store prompt, response, payload, key, request ID, or error text.
+- Payment subjects and coarse country codes are HMACed before storage. Payment state is bounded by subject count, event count, rolling window, and profile TTL. No payment amounts, card data, exact addresses, or raw country values are retained.
+- Credential-status inputs are booleans; the engine does not receive or store credential values, expiry dates, or revocation records.
 - Correlation state stores at most the configured key limit plus one HMAC key digest per cohort, and is bounded by `MaxProfiles` and `ProfileTTL`.
 - Findings contain only timestamp, score, threshold, alert/warmup flags, and named signals with fixed reasons. They omit model/provider labels and all key identifiers.
 - The optional callback receives only those findings. Metrics are aggregate counts.
@@ -74,6 +81,14 @@ plugin, err := fraudguard.New(fraudguard.Config{
     EnableCrossKeyCorrelation:    true, // opt in; default is false
     MaxDistinctKeysPerIdentity:   3,    // alert when the limit is exceeded
     CorrelationWindow:            10 * time.Minute,
+    EnablePaymentVelocity:        true, // opt in; default is false
+    EnablePaymentLocation:        true, // opt in; default is false
+    MaxPaymentsPerWindow:         8,
+    PaymentWindow:                15 * time.Minute,
+    PaymentLocationWarmupEvents:  3,
+    EnableExpiredKeySignal:       true, // each key-status signal is independent
+    EnableRevokedKeySignal:       true,
+    EnableExposedKeySignal:       true,
     OnFinding: func(f fraudguard.Finding) {
         // Forward only this structured, payload-free finding to your audit pipeline.
         // Do not attach prompts, raw keys, or error strings here.
@@ -84,13 +99,35 @@ if err != nil {
 }
 ```
 
-Zero or negative numeric values use the defaults: 5 warmup requests, a 15-minute rolling window, 2-hour idle profile TTL, at most 10,000 profiles, 256 events per profile, and alert threshold 60. A threshold above 100 is clamped to 100. Warmup suppresses anomaly signals until enough prior events exist.
+Zero or negative numeric values use the defaults: 5 warmup requests, a 15-minute rolling window, 2-hour idle profile TTL, at most 10,000 profiles, 256 events per profile, and alert threshold 60. Payment signals also default off; their window/TTL inherit the main window/profile TTL, their subject/event bounds inherit the main profile/event bounds, their velocity limit defaults to 10, and location warmup defaults to three trusted events. A threshold above 100 is clamped to 100. Warmup suppresses anomaly signals until enough prior events exist.
 
 The allowlist accepts internal virtual-key **IDs**, not virtual-key secrets. IDs are HMACed at initialization and never retained in clear text by the engine. Do not populate it with bearer tokens.
 
 Cross-key correlation is off by default. When enabled, its default limit is three distinct keys and its default window matches `Window`. The Bifrost adapter uses `Grant.Identity().User().ID` only when present. Bifrost may not expose a user identity for a virtual key even when an operator considers that key assigned to a user; in that case no cross-key correlation occurs. Requests are still observed and never blocked.
 
 Direct `Engine` users may pass a `Request.CohortID`, but only from a trusted, already-authenticated identity source. Do not derive it from IP headers, request headers, prompts, or other caller-controlled fields.
+
+Payment and credential-status signals are disabled unless explicitly enabled. `RecordPayment` must be called once per transaction attempt with a stable internal or pseudonymous subject ID and, if location scoring is enabled, a coarse country code from a trusted payment source:
+
+```go
+paymentFinding := fraudGuard.RecordPayment(fraudguard.PaymentEvent{
+    SubjectID:   pseudonymousPaymentSubject,
+    CountryCode: trustedProcessorCountry,
+    Timestamp:   time.Now(),
+})
+```
+
+The Bifrost request hook does not discover payment events. Do not pass card numbers, payment tokens, addresses, IP-derived caller headers, or raw customer credentials. For key status, trusted authentication or credential-management code can attach only the status booleans to the current Bifrost context before FraudGuard's `PreLLMHook`:
+
+```go
+fraudguard.SetTrustedCredentialStatus(ctx, fraudguard.CredentialStatus{
+    Expired: statusFromTrustedRegistry.Expired,
+    Revoked: statusFromTrustedRegistry.Revoked,
+    Exposed: statusFromTrustedRegistry.MarkedExposed,
+})
+```
+
+`Exposed` means another trusted system has already marked the key as exposed; FraudGuard does not search public sources or inspect secrets. These findings never authorize, reject, or alter a request or payment.
 
 ## Integration
 
@@ -136,16 +173,29 @@ From this directory:
 go run ./cmd/demo
 ```
 
-The demo warms a key with five requests 30 seconds apart, then simulates another request after one second. It prints an observe-only rapid-sequence finding and aggregate metrics. It does not send any network traffic.
+The demo warms a key with five requests 30 seconds apart, then simulates another request after one second. It also supplies synthetic payment events and trusted key-status booleans to the optional signal APIs. It prints observe-only findings and aggregate metrics; it does not send any network traffic.
+
+Expected synthetic signals include `rapid_sequence`, `payment_new_location`, `payment_velocity`, and the separate `key_expired`, `key_revoked`, and `key_exposed` signals.
 
 ## Tests
 
 ```sh
 go test ./...
 go test -race ./...
+go vet ./...
 ```
 
-Tests cover a benign baseline, an anomaly below a simple 10-requests/minute limit, warmup, deterministic scores/reasons, token spikes, repeated failures, concurrent requests, expiry and profile bounds, exemptions, threshold behavior, privacy of emitted findings, and the Bifrost hook's observe-only behavior.
+Tests cover a benign baseline, an anomaly below a simple 10-requests/minute limit, warmup, deterministic scores/reasons, token spikes, repeated failures, concurrent requests and payment events, expiry and profile bounds, exemptions, threshold behavior, privacy of emitted findings, independent opt-ins for payment and key-status signals, and observe-only hooks.
+
+### Verify against the exact upstream commit
+
+To verify the plugin against the pinned Bifrost source instead of the published core module, clone Bifrost and check out the commit recorded above, then run this from the plugin directory:
+
+```sh
+BIFROST_ROOT=/path/to/bifrost bash scripts/verify-pinned-bifrost.sh
+```
+
+The script refuses a different Bifrost commit, creates a temporary Go workspace outside both repositories, then runs tests, the race detector, `go vet`, and the demo against the local `core` source. It does not modify or commit anything in the Bifrost checkout.
 
 ## Scoring signals
 
@@ -160,6 +210,11 @@ Signal weights add and the total is capped at 100. Signals are sorted by name fo
 | `input_volume_spike` | 30 | Input tokens exceed 3x the prior mean or prior mean + 512, with at least two completed samples. |
 | `output_volume_spike` | 25 | Output tokens exceed 3x the prior mean or prior mean + 256, with at least two completed samples. |
 | `repeated_errors` | 35 | Among the last five completed outcomes, at least three fail and failures are at least 60%; the earlier retained baseline error rate must be no more than 50%. |
+| `payment_velocity` | 60 | An opted-in trusted payment subject exceeds `MaxPaymentsPerWindow` inside `PaymentWindow`. |
+| `payment_new_location` | 35 | After the configured warmup, an opted-in trusted country code has not appeared in that subject's retained payment history. |
+| `key_expired` | 70 | Enabled and supplied by trusted credential-status code. |
+| `key_revoked` | 70 | Enabled and supplied by trusted credential-status code. |
+| `key_exposed` | 70 | Enabled and supplied by trusted credential-status code. |
 
 The numerical rules are intentionally simple and inspectable; they are not calibrated production fraud models. Operators should tune warmup/window/threshold against representative traffic and review alert rates before relying on the findings.
 
@@ -168,6 +223,7 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 - In-memory state is per process and non-durable. Multiple Bifrost replicas do not share baselines.
 - Model/provider distribution is represented by novelty rather than a learned statistical distribution.
 - Token counts are available only for responses that report normalized usage. Missing usage cannot produce token-spike signals.
+- Payment and key-status signals require explicit host inputs. No payment processor, location service, or credential-status registry is connected in this prototype; the Bifrost request path alone cannot produce them.
 - Failed requests observed before a response contribute to the error signal only if Bifrost runs this plugin's post-hook for that request.
 - Cross-key correlation depends on Bifrost supplying a resolved authenticated user identity; it does not infer relationships between keys from headers or network addresses.
 - Periodic profile expiration is available via `Engine.Prune`; profile count is also bounded with oldest-profile eviction.

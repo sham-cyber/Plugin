@@ -284,6 +284,222 @@ func TestMissingIdentityDoesNotCreateSharedProfile(t *testing.T) {
 	}
 }
 
+func TestPaymentVelocityAndLocationSignalsAreOptIn(t *testing.T) {
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	disabled := testEngine(t, Config{})
+	for i, country := range []string{"US", "US", "CA"} {
+		finding := disabled.RecordPayment(PaymentEvent{
+			SubjectID:   "trusted-subject",
+			CountryCode: country,
+			Timestamp:   base.Add(time.Duration(i) * time.Second),
+		})
+		if len(finding.Finding.Signals) != 0 {
+			t.Fatalf("payment signals should be disabled by default: %+v", finding.Finding)
+		}
+	}
+	if metrics := disabled.Metrics(); metrics.PaymentEvents != 0 || metrics.PaymentSubjects != 0 {
+		t.Fatalf("disabled payment signals must not retain state: %+v", metrics)
+	}
+
+	velocity := testEngine(t, Config{
+		EnablePaymentVelocity: true,
+		MaxPaymentsPerWindow:  2,
+		PaymentWindow:         time.Minute,
+		AlertThreshold:        60,
+	})
+	for i := 0; i < 2; i++ {
+		finding := velocity.RecordPayment(PaymentEvent{
+			SubjectID: "velocity-subject",
+			Timestamp: base.Add(time.Duration(i) * time.Second),
+		})
+		if containsSignal(finding.Finding, "payment_velocity") {
+			t.Fatalf("velocity signal appeared before limit was exceeded: %+v", finding.Finding)
+		}
+	}
+	velocityFinding := velocity.RecordPayment(PaymentEvent{
+		SubjectID: "velocity-subject",
+		Timestamp: base.Add(2 * time.Second),
+	})
+	if !containsSignal(velocityFinding.Finding, "payment_velocity") || !velocityFinding.Finding.Alert {
+		t.Fatalf("expected observe-only velocity alert after limit crossing: %+v", velocityFinding.Finding)
+	}
+
+	location := testEngine(t, Config{
+		EnablePaymentLocation:       true,
+		PaymentLocationWarmupEvents: 2,
+		AlertThreshold:              30,
+	})
+	for i, country := range []string{"US", "us"} {
+		finding := location.RecordPayment(PaymentEvent{
+			SubjectID:   "location-subject",
+			CountryCode: country,
+			Timestamp:   base.Add(time.Duration(i) * time.Second),
+		})
+		if containsSignal(finding.Finding, "payment_new_location") {
+			t.Fatalf("same coarse location should not alert: %+v", finding.Finding)
+		}
+	}
+	locationFinding := location.RecordPayment(PaymentEvent{
+		SubjectID:   "location-subject",
+		CountryCode: "CA",
+		Timestamp:   base.Add(2 * time.Second),
+	})
+	if !containsSignal(locationFinding.Finding, "payment_new_location") {
+		t.Fatalf("expected new coarse-location signal: %+v", locationFinding.Finding)
+	}
+
+	velocityOnly := testEngine(t, Config{EnablePaymentVelocity: true, MaxPaymentsPerWindow: 1})
+	velocityOnly.RecordPayment(PaymentEvent{SubjectID: "only-velocity", CountryCode: "US", Timestamp: base})
+	velocityOnlyFinding := velocityOnly.RecordPayment(PaymentEvent{
+		SubjectID:   "only-velocity",
+		CountryCode: "CA",
+		Timestamp:   base.Add(time.Second),
+	})
+	if !containsSignal(velocityOnlyFinding.Finding, "payment_velocity") ||
+		containsSignal(velocityOnlyFinding.Finding, "payment_new_location") {
+		t.Fatalf("velocity opt-in must not enable location signals: %+v", velocityOnlyFinding.Finding)
+	}
+}
+
+func TestCredentialStatusSignalsAreSeparateAndOptIn(t *testing.T) {
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	status := CredentialStatus{Expired: true, Revoked: true, Exposed: true}
+	request := Request{
+		VirtualKeyID:     "internal-key-id",
+		Provider:         "provider-a",
+		Model:            "model-a",
+		Timestamp:        base,
+		CredentialStatus: status,
+	}
+
+	disabled := testEngine(t, Config{})
+	_, disabledAssessment := disabled.Start(request)
+	if len(disabledAssessment.Finding.Signals) != 0 {
+		t.Fatalf("credential-status signals should be disabled by default: %+v", disabledAssessment.Finding)
+	}
+
+	revokedOnly := testEngine(t, Config{EnableRevokedKeySignal: true})
+	_, revokedAssessment := revokedOnly.Start(request)
+	if len(revokedAssessment.Finding.Signals) != 1 ||
+		!containsSignal(revokedAssessment.Finding, "key_revoked") ||
+		!revokedAssessment.Finding.Alert {
+		t.Fatalf("revoked-key opt-in must produce only its own signal: %+v", revokedAssessment.Finding)
+	}
+
+	allEnabled := testEngine(t, Config{
+		EnableExpiredKeySignal: true,
+		EnableRevokedKeySignal: true,
+		EnableExposedKeySignal: true,
+	})
+	_, allAssessment := allEnabled.Start(request)
+	for _, name := range []string{"key_expired", "key_revoked", "key_exposed"} {
+		if !containsSignal(allAssessment.Finding, name) {
+			t.Fatalf("missing enabled credential-status signal %q: %+v", name, allAssessment.Finding)
+		}
+	}
+}
+
+func TestPaymentStateIsBoundedExpiresAndHashesInputs(t *testing.T) {
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	const subject = "PRIVATE_PAYMENT_SUBJECT_VALUE"
+	engine := testEngine(t, Config{
+		EnablePaymentVelocity:       true,
+		EnablePaymentLocation:       true,
+		MaxPaymentSubjects:          1,
+		MaxPaymentEventsPerSubject:  2,
+		PaymentProfileTTL:           time.Minute,
+		PaymentLocationWarmupEvents: 1,
+	})
+	for i, country := range []string{"US", "CA", "GB"} {
+		engine.RecordPayment(PaymentEvent{
+			SubjectID:   subject,
+			CountryCode: country,
+			Timestamp:   base.Add(time.Duration(i) * time.Second),
+		})
+	}
+	if len(engine.payments) != 1 {
+		t.Fatalf("payment subject limit was not enforced: %d", len(engine.payments))
+	}
+	for id, p := range engine.payments {
+		if id == subject || len(id) != 64 {
+			t.Fatalf("payment subject identity was not HMACed: %q", id)
+		}
+		if len(p.events) > 2 {
+			t.Fatalf("payment event bound was not enforced: %d", len(p.events))
+		}
+		for _, event := range p.events {
+			if event.countryDigest == "US" || event.countryDigest == "CA" || event.countryDigest == "GB" {
+				t.Fatalf("raw country code was retained: %+v", event)
+			}
+		}
+	}
+	engine.RecordPayment(PaymentEvent{
+		SubjectID: "second-subject",
+		Timestamp: base.Add(4 * time.Second),
+	})
+	if metrics := engine.Metrics(); metrics.PaymentSubjects != 1 {
+		t.Fatalf("payment subject limit was not enforced after eviction: %+v", metrics)
+	}
+	if removed := engine.Prune(base.Add(2 * time.Minute)); removed != 1 {
+		t.Fatalf("expected payment subject to expire, removed=%d", removed)
+	}
+	if metrics := engine.Metrics(); metrics.PaymentSubjects != 0 {
+		t.Fatalf("expired payment subject remains: %+v", metrics)
+	}
+}
+
+func TestPaymentFindingsDoNotLeakSubjectOrCountry(t *testing.T) {
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	const subject = "PRIVATE_PAYMENT_SUBJECT_VALUE"
+	findings := make([]Finding, 0)
+	engine := testEngine(t, Config{
+		EnablePaymentVelocity:       true,
+		EnablePaymentLocation:       true,
+		MaxPaymentsPerWindow:        1,
+		PaymentLocationWarmupEvents: 1,
+		OnFinding:                   func(f Finding) { findings = append(findings, f) },
+	})
+	engine.RecordPayment(PaymentEvent{SubjectID: subject, CountryCode: "US", Timestamp: base})
+	engine.RecordPayment(PaymentEvent{SubjectID: subject, CountryCode: "CA", Timestamp: base.Add(time.Second)})
+	for _, finding := range findings {
+		for _, signal := range finding.Signals {
+			if strings.Contains(signal.Reason, subject) ||
+				strings.Contains(signal.Reason, "US") ||
+				strings.Contains(signal.Reason, "CA") {
+				t.Fatalf("payment finding leaked identifying input: %+v", signal)
+			}
+		}
+	}
+}
+
+func TestConcurrentPaymentEventsAreSafe(t *testing.T) {
+	engine := testEngine(t, Config{
+		EnablePaymentVelocity:      true,
+		MaxPaymentSubjects:         12,
+		MaxPaymentEventsPerSubject: 64,
+		MaxPaymentsPerWindow:       100,
+	})
+	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	var wg sync.WaitGroup
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func(subjectNumber int) {
+			defer wg.Done()
+			for j := 0; j < 40; j++ {
+				engine.RecordPayment(PaymentEvent{
+					SubjectID: fmt.Sprintf("subject-%d", subjectNumber),
+					Timestamp: base.Add(time.Duration(j) * time.Second),
+				})
+			}
+		}(i)
+	}
+	wg.Wait()
+	metrics := engine.Metrics()
+	if metrics.PaymentEvents != 12*40 || metrics.PaymentSubjects != 12 {
+		t.Fatalf("unexpected concurrent payment metrics: %+v", metrics)
+	}
+}
+
 func containsSignal(finding Finding, name string) bool {
 	for _, signal := range finding.Signals {
 		if signal.Name == name {

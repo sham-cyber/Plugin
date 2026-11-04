@@ -1,6 +1,6 @@
 # FraudGuard verification report
 
-**Report date:** 2026-11-03
+**Report date:** 2026-11-04
 
 **Purpose:** Record what was inspected and tested for the FraudGuard hackathon prototype, and what has not been verified.
 
@@ -38,6 +38,8 @@ Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documen
 - Deterministic scores from 0 to 100 with named signals and reasons.
 - Warmup, window, retention, profile-count, and alert-threshold configuration.
 - Detection signals for model/provider novelty, rapid request sequences, input/output token spikes, and repeated failures.
+- Independent, disabled-by-default payment velocity and new-coarse-country signals when a host supplies trusted payment events.
+- Independent, disabled-by-default expired/revoked/exposed key-status signals when a trusted auth or credential system supplies those booleans.
 - Optional cross-key signal using a resolved authenticated user identity, disabled by default.
 - Thread-safe in-memory state, bounded profile and correlation storage, and process-local HMACs for internal identifiers.
 - Observe-only hooks: findings do not short-circuit, reject, or change a request.
@@ -45,21 +47,23 @@ Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documen
 
 ## 4. Checks run
 
-The checks below were run from `plugins/fraudguard` on 2026-11-03 with Go 1.27.3.
+The checks below were run from `plugins/fraudguard` on 2026-11-04 with Go 1.27.3. The exact-source run used a temporary Go workspace linking this module to `core` from the pinned upstream checkout.
 
 | Check | Result |
 | --- | --- |
-| `GOWORK=/tmp/fraudguard-validation.work GOSUMDB=sum.golang.org go test ./...` | Passed using the temporary workspace that links the plugin module to the local pinned Bifrost `core` source. |
+| `BIFROST_ROOT=/path/to/pinned/bifrost bash scripts/verify-pinned-bifrost.sh` | Passed against commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9`; the script ran tests, race detection, vet, and demo using local `core` source. |
+| `GOSUMDB=sum.golang.org go test ./...` | Passed. |
 | `GOSUMDB=sum.golang.org go test -race ./...` | Passed. |
 | `GOSUMDB=sum.golang.org go vet ./...` | Passed; no diagnostics. |
-| `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; printed `score=30`, `alert=false`, `signals=[rapid_sequence]`; no network traffic. |
+| `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; printed the synthetic request finding (`score=30`, `alert=false`, `signals=[rapid_sequence]`), payment finding (`score=95`, `alert=true`, `signals=[payment_new_location payment_velocity]`), and trusted key-status finding (`score=100`, `alert=true`, `signals=[key_expired key_exposed key_revoked]`). No network traffic. |
 
-The test suite covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, concurrency, profile/cohort bounds and expiry, privacy, exemptions, alert-threshold behavior, and the observe-only plugin hooks. A test for alert-threshold clamping above 100 was added and run as part of the passing suite.
+The test suite covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, concurrency for requests and payment events, profile/cohort/payment-state bounds and expiry, privacy, exemptions, alert-threshold behavior, independent payment/key-status opt-ins, and observe-only plugin hooks. A test for alert-threshold clamping above 100 was added and run as part of the passing suite.
 
 ## 5. Privacy and scope checks
 
 - Findings contain structured scores and fixed signal reasons, not prompt text, raw virtual-key IDs, or raw cohort IDs.
 - Profile and cohort map keys use process-local HMACs; the HMAC key is not persisted.
+- Payment subject IDs and coarse country values are HMACed before retention. Findings do not include payment subjects, country values, payment amounts, or credential values.
 - Cross-key correlation is opt-in and does not use IP or request headers.
 - The demo is synthetic and makes no provider or network calls.
 - The upstream checkout remained at the pinned commit with a clean worktree; no upstream source files were changed.
@@ -69,6 +73,7 @@ The test suite covers benign behavior, below-rate-limit anomalies, warmup, deter
 - FraudGuard is **not** installed, accepted, or merged into upstream Bifrost.
 - The Bifrost HTTP server's built-in plugin registration/configuration path has not been wired or tested.
 - No live-provider, production, multi-replica, or real-customer traffic test was run.
+- No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
 - No latency benchmark was run; no sub-30ms target is claimed.
 - No dashboard, Redis/shared store, automatic blocking, SaaS billing, pricing, or revenue model is implemented.
 - Findings are heuristic indicators, not proof of fraud. False positives are possible and thresholds require review against representative, permissioned traffic.

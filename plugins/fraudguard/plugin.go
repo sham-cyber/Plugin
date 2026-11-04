@@ -7,6 +7,16 @@ import (
 const PluginName = "fraudguard"
 
 type contextHandleKey struct{}
+type credentialStatusContextKey struct{}
+
+// SetTrustedCredentialStatus attaches authoritative key-state results for the
+// current request. Call it only from trusted authentication or key-management
+// code, never from caller-controlled request headers or payload fields.
+func SetTrustedCredentialStatus(ctx *schemas.BifrostContext, status CredentialStatus) {
+	if ctx != nil {
+		ctx.SetValue(credentialStatusContextKey{}, status)
+	}
+}
 
 // Plugin adapts the engine to Bifrost's schemas.LLMPlugin hook contract.
 // Its hooks are deliberately observe-only: they never mutate or short-circuit requests.
@@ -43,16 +53,18 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	if keyID == "" {
 		return req, nil, nil
 	}
+	credentialStatus, _ := ctx.Value(credentialStatusContextKey{}).(CredentialStatus)
 	provider, model, _ := req.GetRequestFields()
 	cohortID := ""
 	if p.engine.cfg.EnableCrossKeyCorrelation {
 		cohortID = resolvedUserID(ctx)
 	}
 	handle, _ := p.engine.Start(Request{
-		VirtualKeyID: keyID,
-		CohortID:     cohortID,
-		Provider:     string(provider),
-		Model:        model,
+		VirtualKeyID:     keyID,
+		CohortID:         cohortID,
+		Provider:         string(provider),
+		Model:            model,
+		CredentialStatus: credentialStatus,
 	})
 	if handle.profileID != "" {
 		ctx.SetValue(contextHandleKey{}, handle)
@@ -104,5 +116,12 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, response *schemas.Bifr
 
 // Engine exposes aggregate metrics and deterministic standalone scoring to operators.
 func (p *Plugin) Engine() *Engine { return p.engine }
+
+// RecordPayment accepts one trusted transaction event from a host payment
+// integration. It only emits an observe-only finding; it never authorizes,
+// declines, or changes a payment.
+func (p *Plugin) RecordPayment(event PaymentEvent) Assessment {
+	return p.engine.RecordPayment(event)
+}
 
 var _ schemas.LLMPlugin = (*Plugin)(nil)

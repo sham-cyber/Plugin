@@ -30,6 +30,49 @@ func main() {
 	fmt.Printf("observe-only finding: score=%d alert=%t signals=%v\n",
 		assessment.Finding.Score, assessment.Finding.Alert, signalNames(assessment.Finding.Signals))
 	fmt.Printf("metrics: %+v\n", engine.Metrics())
+
+	paymentEngine, err := fraudguard.NewEngine(fraudguard.Config{
+		EnablePaymentVelocity:       true,
+		EnablePaymentLocation:       true,
+		MaxPaymentsPerWindow:        2,
+		PaymentLocationWarmupEvents: 2,
+		AlertThreshold:              60,
+	})
+	if err != nil {
+		panic(err)
+	}
+	for i, country := range []string{"US", "US", "CA"} {
+		payment := paymentEngine.RecordPayment(fraudguard.PaymentEvent{
+			SubjectID:   "synthetic-payment-subject",
+			CountryCode: country,
+			Timestamp:   base.Add(time.Duration(i) * 30 * time.Second),
+		})
+		if i == 2 {
+			fmt.Printf("synthetic payment finding: score=%d alert=%t signals=%v\n",
+				payment.Finding.Score, payment.Finding.Alert, signalNames(payment.Finding.Signals))
+		}
+	}
+
+	keyEngine, err := fraudguard.NewEngine(fraudguard.Config{
+		EnableExpiredKeySignal: true,
+		EnableRevokedKeySignal: true,
+		EnableExposedKeySignal: true,
+		AlertThreshold:         60,
+	})
+	if err != nil {
+		panic(err)
+	}
+	_, keyAssessment := keyEngine.Start(fraudguard.Request{
+		VirtualKeyID: "synthetic-internal-key",
+		Timestamp:    base,
+		CredentialStatus: fraudguard.CredentialStatus{
+			Expired: true,
+			Revoked: true,
+			Exposed: true,
+		},
+	})
+	fmt.Printf("synthetic key-status finding: score=%d alert=%t signals=%v\n",
+		keyAssessment.Finding.Score, keyAssessment.Finding.Alert, signalNames(keyAssessment.Finding.Signals))
 }
 
 func record(engine *fraudguard.Engine, key, provider, model string, at time.Time, input, output int64) {

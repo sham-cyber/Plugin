@@ -35,6 +35,21 @@ type Config struct {
 	MaxDistinctKeysPerIdentity int
 	// CorrelationWindow bounds the distinct-key set (defaults to Window).
 	CorrelationWindow time.Duration
+	// Payment signals are independently opt-in and use only trusted events supplied
+	// by the host integration. No payment data is inferred from request headers.
+	EnablePaymentVelocity       bool
+	EnablePaymentLocation       bool
+	PaymentWindow               time.Duration
+	PaymentProfileTTL           time.Duration
+	MaxPaymentSubjects          int
+	MaxPaymentEventsPerSubject  int
+	MaxPaymentsPerWindow        int
+	PaymentLocationWarmupEvents int
+	// Credential-state signals are independently opt-in. The host must supply
+	// authoritative results from its auth or credential-management layer.
+	EnableExpiredKeySignal bool
+	EnableRevokedKeySignal bool
+	EnableExposedKeySignal bool
 	// AlertThreshold is inclusive; findings below it remain observable but are not alerts.
 	AlertThreshold int
 	// ExemptVirtualKeyIDs contains resolved internal IDs, never credential values.
@@ -72,6 +87,27 @@ type Request struct {
 	Provider  string
 	Model     string
 	Timestamp time.Time
+	// CredentialStatus must come from a trusted authentication or credential source.
+	CredentialStatus CredentialStatus
+}
+
+// CredentialStatus contains explicit results from a trusted key-management source.
+// FraudGuard does not inspect credentials or determine these states itself.
+type CredentialStatus struct {
+	Expired bool
+	Revoked bool
+	Exposed bool
+}
+
+// PaymentEvent is a minimal, trusted payment signal. Send one event per transaction
+// attempt. SubjectID should be a stable internal or pseudonymous account identifier.
+// CountryCode must be a coarse country code from a trusted payment source, never a
+// value inferred from caller headers. Raw identifiers and country codes are not
+// retained by the engine.
+type PaymentEvent struct {
+	SubjectID   string
+	CountryCode string
+	Timestamp   time.Time
 }
 
 // Completion contains request outcome metadata. It must not contain response bodies
@@ -97,12 +133,14 @@ type Assessment struct {
 
 // Metrics is a privacy-preserving aggregate snapshot.
 type Metrics struct {
-	Profiles       int    `json:"profiles"`
-	Cohorts        int    `json:"cohorts"`
-	Requests       uint64 `json:"requests"`
-	Findings       uint64 `json:"findings"`
-	Alerts         uint64 `json:"alerts"`
-	ExemptRequests uint64 `json:"exempt_requests"`
+	Profiles        int    `json:"profiles"`
+	Cohorts         int    `json:"cohorts"`
+	PaymentSubjects int    `json:"payment_subjects"`
+	Requests        uint64 `json:"requests"`
+	PaymentEvents   uint64 `json:"payment_events"`
+	Findings        uint64 `json:"findings"`
+	Alerts          uint64 `json:"alerts"`
+	ExemptRequests  uint64 `json:"exempt_requests"`
 }
 
 type event struct {
@@ -127,6 +165,17 @@ type cohortProfile struct {
 	alerted  bool
 }
 
+type paymentObservation struct {
+	at            time.Time
+	countryDigest string
+}
+
+type paymentProfile struct {
+	events          []paymentObservation
+	lastSeen        time.Time
+	velocityAlerted bool
+}
+
 // Engine owns the thread-safe profile store and deterministic scoring logic.
 type Engine struct {
 	mu         sync.Mutex
@@ -135,6 +184,7 @@ type Engine struct {
 	exemptions map[string]struct{}
 	profiles   map[string]*profile
 	cohorts    map[string]*cohortProfile
+	payments   map[string]*paymentProfile
 	nextID     uint64
 	metrics    Metrics
 }
@@ -153,6 +203,7 @@ func NewEngine(config Config) (*Engine, error) {
 		exemptions: make(map[string]struct{}, len(config.ExemptVirtualKeyIDs)),
 		profiles:   make(map[string]*profile),
 		cohorts:    make(map[string]*cohortProfile),
+		payments:   make(map[string]*paymentProfile),
 	}
 	for _, id := range config.ExemptVirtualKeyIDs {
 		if strings.TrimSpace(id) != "" {
@@ -189,6 +240,27 @@ func withDefaults(config Config) Config {
 	if config.CorrelationWindow <= 0 {
 		config.CorrelationWindow = config.Window
 	}
+	if config.PaymentWindow <= 0 {
+		config.PaymentWindow = config.Window
+	}
+	if config.PaymentProfileTTL <= 0 {
+		config.PaymentProfileTTL = config.ProfileTTL
+	}
+	if config.MaxPaymentSubjects <= 0 {
+		config.MaxPaymentSubjects = config.MaxProfiles
+	}
+	if config.MaxPaymentEventsPerSubject <= 0 {
+		config.MaxPaymentEventsPerSubject = config.MaxEventsPerProfile
+	}
+	if config.MaxPaymentEventsPerSubject > 10_000 {
+		config.MaxPaymentEventsPerSubject = 10_000
+	}
+	if config.MaxPaymentsPerWindow <= 0 {
+		config.MaxPaymentsPerWindow = 10
+	}
+	if config.PaymentLocationWarmupEvents <= 0 {
+		config.PaymentLocationWarmupEvents = 3
+	}
 	if config.AlertThreshold <= 0 {
 		config.AlertThreshold = 60
 	}
@@ -220,6 +292,27 @@ func (e *Engine) Start(request Request) (Handle, Assessment) {
 		return Handle{}, Assessment{Finding: e.emptyFinding(now, false)}
 	}
 	var signals []Signal
+	if e.cfg.EnableExpiredKeySignal && request.CredentialStatus.Expired {
+		signals = append(signals, Signal{
+			Name:   "key_expired",
+			Reason: "trusted credential status marks this virtual key as expired",
+			Weight: 70,
+		})
+	}
+	if e.cfg.EnableRevokedKeySignal && request.CredentialStatus.Revoked {
+		signals = append(signals, Signal{
+			Name:   "key_revoked",
+			Reason: "trusted credential status marks this virtual key as revoked",
+			Weight: 70,
+		})
+	}
+	if e.cfg.EnableExposedKeySignal && request.CredentialStatus.Exposed {
+		signals = append(signals, Signal{
+			Name:   "key_exposed",
+			Reason: "trusted credential status marks this virtual key as exposed",
+			Weight: 70,
+		})
+	}
 	if e.cfg.EnableCrossKeyCorrelation && request.CohortID != "" {
 		cohortID := e.cohortDigest(request.CohortID)
 		if e.trackCohortKeyLocked(cohortID, id, now) {
@@ -350,8 +443,69 @@ func (e *Engine) Complete(handle Handle, completion Completion) Assessment {
 	return Assessment{Finding: finding}
 }
 
+// RecordPayment evaluates one trusted payment event. Call it once per transaction
+// attempt; it stores only a keyed digest of the subject and coarse country.
+// It has no blocking or authorization behavior.
+func (e *Engine) RecordPayment(payment PaymentEvent) Assessment {
+	now := payment.Timestamp
+	if now.IsZero() {
+		now = time.Now()
+	}
+	now = now.UTC()
+	subjectID := strings.TrimSpace(payment.SubjectID)
+	if subjectID == "" || (!e.cfg.EnablePaymentVelocity && !e.cfg.EnablePaymentLocation) {
+		return Assessment{Finding: e.emptyFinding(now, false)}
+	}
+
+	countryDigest := ""
+	if e.cfg.EnablePaymentLocation {
+		if country := normalizeCountryCode(payment.CountryCode); country != "" {
+			countryDigest = e.digest("payment-country", country)
+		}
+	}
+	subjectDigest := e.digest("payment-subject", subjectID)
+
+	e.mu.Lock()
+	p := e.getOrCreatePaymentProfileLocked(subjectDigest, now)
+	e.prunePaymentEventsLocked(p, now)
+	signals := make([]Signal, 0, 2)
+	if e.cfg.EnablePaymentVelocity {
+		if len(p.events) <= e.cfg.MaxPaymentsPerWindow {
+			p.velocityAlerted = false
+		}
+		if len(p.events)+1 > e.cfg.MaxPaymentsPerWindow && !p.velocityAlerted {
+			signals = append(signals, Signal{
+				Name:   "payment_velocity",
+				Reason: "trusted payment-event count exceeded the configured rolling-window limit",
+				Weight: 60,
+			})
+			p.velocityAlerted = true
+		}
+	}
+	if e.cfg.EnablePaymentLocation && countryDigest != "" &&
+		countPaymentLocations(p.events) >= e.cfg.PaymentLocationWarmupEvents &&
+		!hasPaymentLocation(p.events, countryDigest) {
+		signals = append(signals, Signal{
+			Name:   "payment_new_location",
+			Reason: "trusted coarse payment country is outside this subject's recent locations",
+			Weight: 35,
+		})
+	}
+	p.events = append(p.events, paymentObservation{at: now, countryDigest: countryDigest})
+	if len(p.events) > e.cfg.MaxPaymentEventsPerSubject {
+		p.events = append([]paymentObservation(nil), p.events[len(p.events)-e.cfg.MaxPaymentEventsPerSubject:]...)
+	}
+	p.lastSeen = now
+	e.metrics.PaymentEvents++
+	finding := e.makeFindingLocked(now, signals, false)
+	sink := e.cfg.OnFinding
+	e.mu.Unlock()
+	e.emit(sink, finding)
+	return Assessment{Finding: finding}
+}
+
 // Prune expires idle profiles and correlation cohorts. It returns the number of
-// stored records removed (profiles plus cohorts).
+// stored records removed (request profiles, cohorts, plus payment profiles).
 func (e *Engine) Prune(now time.Time) int {
 	if now.IsZero() {
 		now = time.Now()
@@ -359,7 +513,7 @@ func (e *Engine) Prune(now time.Time) int {
 	now = now.UTC()
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	return e.pruneProfilesLocked(now) + e.pruneCohortsLocked(now)
+	return e.pruneProfilesLocked(now) + e.pruneCohortsLocked(now) + e.prunePaymentProfilesLocked(now)
 }
 
 // Metrics returns aggregate counters without exposing individual profile identifiers.
@@ -369,6 +523,7 @@ func (e *Engine) Metrics() Metrics {
 	out := e.metrics
 	out.Profiles = len(e.profiles)
 	out.Cohorts = len(e.cohorts)
+	out.PaymentSubjects = len(e.payments)
 	return out
 }
 
@@ -439,6 +594,62 @@ func (e *Engine) pruneCohortsLocked(now time.Time) int {
 		}
 	}
 	return removed
+}
+
+func (e *Engine) getOrCreatePaymentProfileLocked(id string, now time.Time) *paymentProfile {
+	if p := e.payments[id]; p != nil {
+		if now.Sub(p.lastSeen) > e.cfg.PaymentProfileTTL {
+			delete(e.payments, id)
+		} else {
+			return p
+		}
+	}
+	e.prunePaymentProfilesLocked(now)
+	if len(e.payments) >= e.cfg.MaxPaymentSubjects {
+		e.evictOldestPaymentProfileLocked()
+	}
+	p := &paymentProfile{
+		events:   make([]paymentObservation, 0, min(e.cfg.MaxPaymentEventsPerSubject, 32)),
+		lastSeen: now,
+	}
+	e.payments[id] = p
+	return p
+}
+
+func (e *Engine) prunePaymentProfilesLocked(now time.Time) int {
+	removed := 0
+	for id, p := range e.payments {
+		if now.Sub(p.lastSeen) > e.cfg.PaymentProfileTTL {
+			delete(e.payments, id)
+			removed++
+			continue
+		}
+		e.prunePaymentEventsLocked(p, now)
+	}
+	return removed
+}
+
+func (e *Engine) prunePaymentEventsLocked(p *paymentProfile, now time.Time) {
+	kept := make([]paymentObservation, 0, len(p.events))
+	for _, event := range p.events {
+		if event.at.After(now) || now.Sub(event.at) <= e.cfg.PaymentWindow {
+			kept = append(kept, event)
+		}
+	}
+	p.events = kept
+}
+
+func (e *Engine) evictOldestPaymentProfileLocked() {
+	var oldestID string
+	var oldest time.Time
+	for id, p := range e.payments {
+		if oldestID == "" || p.lastSeen.Before(oldest) {
+			oldestID, oldest = id, p.lastSeen
+		}
+	}
+	if oldestID != "" {
+		delete(e.payments, oldestID)
+	}
 }
 
 func (e *Engine) evictOldestCohortLocked() {
@@ -539,6 +750,38 @@ func (e *Engine) emit(sink func(Finding), finding Finding) {
 
 func (e *Engine) emptyFinding(now time.Time, warmup bool) Finding {
 	return Finding{Timestamp: now.UTC(), Threshold: e.cfg.AlertThreshold, Warmup: warmup}
+}
+
+func normalizeCountryCode(value string) string {
+	value = strings.ToUpper(strings.TrimSpace(value))
+	if len(value) != 2 {
+		return ""
+	}
+	for _, r := range value {
+		if r < 'A' || r > 'Z' {
+			return ""
+		}
+	}
+	return value
+}
+
+func hasPaymentLocation(events []paymentObservation, countryDigest string) bool {
+	for _, event := range events {
+		if event.countryDigest == countryDigest {
+			return true
+		}
+	}
+	return false
+}
+
+func countPaymentLocations(events []paymentObservation) int {
+	count := 0
+	for _, event := range events {
+		if event.countryDigest != "" {
+			count++
+		}
+	}
+	return count
 }
 
 func safeLabel(value string) string {
