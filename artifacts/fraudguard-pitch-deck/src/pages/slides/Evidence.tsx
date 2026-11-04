@@ -6,19 +6,19 @@ export default function Evidence() {
       <div className="absolute left-[6vw] top-[27vh] w-[61vw] space-y-[2.6vh]">
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-primary" />
-          <p className="text-[2vw] leading-[1.18] text-text">Prompts, payloads, and raw virtual-key values are not retained in findings</p>
+          <p className="text-[2vw] leading-[1.18] text-text">Findings retain no prompts, payloads, raw keys, or payment IDs</p>
         </div>
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-primary" />
-          <p className="text-[2vw] leading-[1.18] text-text">State is bounded and in-memory; optional HMAC-based cross-key correlation is off by default</p>
+          <p className="text-[2vw] leading-[1.18] text-text">Bounded memory; HMAC identifiers; cross-key correlation off by default</p>
         </div>
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-primary" />
-          <p className="text-[2vw] leading-[1.18] text-text">Tests passed: go test, race detector, and go vet (Go 1.27.3; 2026-11-03)</p>
+          <p className="text-[2vw] leading-[1.18] text-text">Passed: go test, race, vet (Go 1.27.3; 2026-11-04)</p>
         </div>
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-primary" />
-          <p className="text-[2vw] leading-[1.18] text-text">Demo: score=30 alert=false signals=[rapid_sequence] (synthetic; no network calls)</p>
+          <p className="text-[2vw] leading-[1.18] text-text">Demo: request 30/false; synthetic payment 95 and key status 100 alerts; no network calls</p>
         </div>
       </div>
       <div className="absolute right-[6vw] top-[27vh] flex h-[58vh] w-[26vw] flex-col justify-center rounded-[1.6vw] bg-primary px-[2.2vw] text-bg shadow-[0_1.2vw_2.4vw_rgba(24,49,57,0.14)]">

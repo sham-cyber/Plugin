@@ -3,14 +3,18 @@ export default function Baseline() {
     <div className="w-screen h-screen overflow-hidden relative bg-bg text-text font-body">
       <div className="absolute left-[6vw] top-[7vh] h-[1.1vh] w-[8vw] bg-primary" />
       <h1 className="absolute left-[6vw] top-[11vh] w-[75vw] font-display text-[3.9vw] font-bold leading-[1.08] tracking-[-0.035em] text-text">Build a baseline, score deviations</h1>
-      <div className="absolute left-[6vw] top-[28vh] w-[52vw] space-y-[3.2vh]">
+      <div className="absolute left-[6vw] top-[28vh] w-[52vw] space-y-[2.6vh]">
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-accent" />
-          <p className="text-[2vw] leading-[1.2] text-text">Per-key baseline: model/provider mix, input/output tokens, request spacing, and error rate</p>
+          <p className="text-[2vw] leading-[1.2] text-text">Per-key baseline: model/provider mix, token volume, request spacing, and error rate</p>
         </div>
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-accent" />
-          <p className="text-[2vw] leading-[1.2] text-text">Warmup and rolling window produce a deterministic 0–100 score with named reasons</p>
+          <p className="text-[2vw] leading-[1.2] text-text">Warmup and rolling window give deterministic 0–100 scores with named reasons</p>
+        </div>
+        <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
+          <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-accent" />
+          <p className="text-[2vw] leading-[1.2] text-text">Optional: trusted payment velocity/location and expired, revoked, or exposed key status; no live feeds</p>
         </div>
         <div className="grid grid-cols-[1.1vw_1fr] gap-[1.3vw]">
           <span className="mt-[1.1vh] h-[0.78vw] w-[0.78vw] rounded-full bg-accent" />
