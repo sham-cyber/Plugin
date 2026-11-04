@@ -68,6 +68,14 @@ It uses bounded, in-memory state. It does not use Redis, retain prompts, infer i
 
 The companion module includes opt-in evaluators for these signals, but no live payment-provider, location, or credential-status source is connected to Bifrost. A host must explicitly call `RecordPayment` for a transaction attempt or attach trusted credential status. These paths only report findings. Track the trusted-source integration proposal in [GitHub Issue #1](https://github.com/sham-cyber/Plugin/issues/1).
 
+## Authorship and repository proof
+
+- **Project origin:** FraudGuard is a community hackathon prototype by [sham-cyber](https://github.com/sham-cyber), not an upstream Bifrost feature.
+- **Git history:** [Commit `224d4eb`](https://github.com/sham-cyber/Plugin/commit/224d4ebc165e0db95ad9c88e3cb70ea58edca818), authored by `sham-cyber`, records the opt-in payment and key-status signal implementation. It is a feature commit, not the initial project commit.
+- **License:** This repository's original code and documentation use Apache License 2.0, not MIT. Go source files carry matching copyright and SPDX notices. Bifrost and third-party components retain their own licenses.
+- **Public record:** The GitHub repository is public and uses `main` as its default branch (checked 2026-11-04). Git history is available there.
+- **Open scope:** [Issue #1](https://github.com/sham-cyber/Plugin/issues/1) remains open for trusted-source integration and retry deduplication. No Bifrost upstream files were changed, and no upstream installation, acceptance, or merge is claimed.
+
 ## Origin
 
 FraudGuard adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The application describes a broader system; FraudGuard is an experimental Bifrost plugin applying related behavior-scoring ideas to AI-gateway requests. This reference does not claim the application was granted or that its claims cover FraudGuard; status and claim coverage have not been independently verified.

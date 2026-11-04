@@ -1,3 +1,6 @@
+// Copyright 2026 sham-cyber
+// SPDX-License-Identifier: Apache-2.0
+
 package fraudguard
 
 import (

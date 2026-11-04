@@ -1,3 +1,6 @@
+// Copyright 2026 sham-cyber
+// SPDX-License-Identifier: Apache-2.0
+//
 // Package fraudguard provides an observe-only behavioral anomaly detector for Bifrost.
 //
 // The detector keeps bounded, in-memory behavioral summaries per resolved virtual key.
