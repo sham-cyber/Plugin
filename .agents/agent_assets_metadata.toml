@@ -85,3 +85,17 @@ mtime_ms = 1793793483928
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/922a1f24-c117-41d7-9496-6ed315042c2a/05bdc30c-74d1-4e7d-9d43-3451296acf97"
 storage_version_token = "1793793486015000"
 content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+
+[[outputs]]
+id = "ZCWZcCmnyGLWP4-IBcLl0"
+uri = "file://.local/outputs/pitch.pdf"
+type = "pdf"
+title = "FraudGuard Pitch (PDF)"
+description = "Five-slide PDF export of the FraudGuard hackathon pitch deck."
+logical_id = "75491bd7-5f15-42a5-a986-3633032aaeef"
+content_hash = "sha256:b5debe4ab4c9f3ebcf6f174dbfef35a4bc8b52dfef6fbfd090addd3301bf5503"
+size = 446820
+mtime_ms = 1793801241258
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/75491bd7-5f15-42a5-a986-3633032aaeef/1e479f2f-b1ed-42f7-aa47-5d5a2bf171bb"
+storage_version_token = "1793801243059174"
+content_type = "application/pdf"
