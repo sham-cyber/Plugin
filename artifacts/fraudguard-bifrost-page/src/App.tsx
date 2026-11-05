@@ -23,6 +23,7 @@ import {
 import {
   Route,
   Switch,
+  Link,
   useLocation,
   Router as WouterRouter,
 } from 'wouter';
@@ -74,6 +75,7 @@ function Home() {
           <a href="#repository" data-testid="link-repository">GitHub</a>
           <a href="#signals" data-testid="link-signals">Signals</a>
           <a href="#privacy" data-testid="link-privacy">Data boundaries</a>
+          <Link href="/results" className="results-nav-link" data-testid="link-results">Demo results <ArrowRight size={13} /></Link>
           <a className="nav-cta" href="https://github.com/sham-cyber/Plugin" target="_blank" rel="noreferrer" data-testid="link-demo">Open GitHub <ArrowDownRight size={14} /></a>
         </nav>
       </header>
@@ -359,6 +361,161 @@ function Home() {
   );
 }
 
+function Results() {
+  return (
+    <main className="page-shell results-page">
+      <header className="topbar">
+        <Link href="/" className="brand" aria-label="FraudGuard home" data-testid="link-results-home">
+          <span className="brand-mark"><ShieldCheck size={17} strokeWidth={1.8} /></span>
+          <span>FraudGuard <small>for Bifrost</small></span>
+        </Link>
+        <nav className="nav-links results-nav" aria-label="Main navigation">
+          <Link href="/" data-testid="link-results-back">Overview</Link>
+          <Link href="/results" aria-current="page" data-testid="link-results-current">Demo results</Link>
+        </nav>
+      </header>
+
+      <section className="results-hero">
+        <div className="results-kicker">Operator view / captured Go demo</div>
+        <div className="results-heading-row">
+          <div>
+            <h1>Findings, <em>made legible.</em></h1>
+            <p>Two fixed examples from the FraudGuard Go demo. Read the score, the signal behind it, and—most importantly—what the finding does not do.</p>
+          </div>
+          <div className="synthetic-seal" data-testid="status-synthetic-fixed">
+            <span className="seal-dot" />
+            <div><strong>SYNTHETIC · FIXED</strong><small>Demo data only · no live feed</small></div>
+          </div>
+        </div>
+        <div className="results-boundary" role="note" data-testid="notice-observe-only">
+          <ShieldCheck size={18} />
+          <span><strong>Observe-only, by design.</strong> Findings add context for an operator; they do not block, rewrite, authorize, or change requests.</span>
+          <span className="boundary-chip">PASS-THROUGH</span>
+        </div>
+      </section>
+
+      <section className="results-content" aria-label="Synthetic demo findings">
+        <article className="result-card behavior-card" data-testid="result-behavior">
+          <div className="result-card-top">
+            <div>
+              <div className="result-index">01 / REQUEST BEHAVIOR</div>
+              <h2>A familiar rhythm,<br /><em>then a sudden beat.</em></h2>
+            </div>
+            <div className="result-outcome"><span className="outcome-dot" /><span>OBSERVE ONLY</span><strong>Pass-through</strong></div>
+          </div>
+
+          <div className="score-band">
+            <div className="score-block">
+              <span className="score-label">Finding score</span>
+              <div className="result-score" data-testid="score-behavior">30<span> / 100</span></div>
+              <span className="score-explainer">Below alert threshold</span>
+            </div>
+            <div className="threshold-block">
+              <div className="threshold-copy"><span>Alert threshold</span><strong data-testid="threshold-behavior">60</strong></div>
+              <div className="threshold-track" aria-label="Score 30 out of 100; alert threshold 60"><i className="threshold-marker" /><i className="score-marker behavior-marker" /></div>
+              <div className="track-labels"><span>0</span><span>30 score</span><span>60 threshold</span><span>100</span></div>
+            </div>
+            <div className="alert-state"><span className="alert-led" /><strong data-testid="status-behavior-alert">No alert</strong><small>alert = false</small></div>
+          </div>
+
+          <div className="result-detail-grid">
+            <div className="signal-pane">
+              <div className="pane-label">Signal contribution</div>
+              <div className="signal-row" data-testid="signal-rapid-sequence">
+                <span className="signal-mark">01</span>
+                <div><strong>rapid_sequence</strong><small>Request arrived much sooner than the recent interval pattern.</small></div>
+                <b>+30</b>
+              </div>
+              <div className="signal-total"><span>Total score</span><strong>30 / 100</strong></div>
+            </div>
+            <div className="explain-pane">
+              <div className="pane-label">What happened</div>
+              <p>Five warmup requests were spaced <strong>30 seconds apart</strong>. The sixth arrived <strong>1 second</strong> after the prior request, triggering the rapid-sequence signal.</p>
+              <div className="sequence" aria-label="Synthetic request sequence">
+                <div className="sequence-row"><span>Warmup</span><div className="sequence-dots"><i /><i /><i /><i /><i /></div><b>5 × 30s</b></div>
+                <div className="sequence-row sequence-final"><span>Request 6</span><div className="sequence-gap"><i /> <b>1s</b></div><b>Score +30</b></div>
+              </div>
+            </div>
+          </div>
+          <footer className="result-card-foot"><span>INTERPRETATION</span><p>A timing anomaly is a review clue, not a verdict. The request continues unchanged.</p></footer>
+        </article>
+
+        <article className="result-card payment-card" data-testid="result-payment">
+          <div className="result-card-top">
+            <div>
+              <div className="result-index">02 / TRUSTED PAYMENT INPUT</div>
+              <h2>New country.<br /><em>Window exceeded.</em></h2>
+            </div>
+            <div className="result-outcome payment-outcome"><span className="outcome-dot" /><span>OBSERVATION ONLY</span><strong>No authorization decision</strong></div>
+          </div>
+
+          <div className="payment-context" data-testid="notice-payment-trusted-input">
+            <div className="context-mark"><Activity size={17} /></div>
+            <p><strong>Opt-in trusted host input</strong><span>These payment events are supplied explicitly by a trusted host integration. They are not discovered from Bifrost requests and are not live processor data.</span></p>
+            <span className="context-tag">SYNTHETIC PAYMENT SUBJECT</span>
+          </div>
+
+          <div className="score-band payment-score-band">
+            <div className="score-block">
+              <span className="score-label">Finding score</span>
+              <div className="result-score payment-score" data-testid="score-payment">95<span> / 100</span></div>
+              <span className="score-explainer">At or above alert threshold</span>
+            </div>
+            <div className="threshold-block">
+              <div className="threshold-copy"><span>Alert threshold</span><strong data-testid="threshold-payment">60</strong></div>
+              <div className="threshold-track" aria-label="Score 95 out of 100; alert threshold 60"><i className="threshold-marker" /><i className="score-marker payment-marker" /></div>
+              <div className="track-labels"><span>0</span><span>60 threshold</span><span>95 score</span><span>100</span></div>
+            </div>
+            <div className="alert-state payment-alert"><span className="alert-led" /><strong data-testid="status-payment-alert">Alert finding</strong><small>alert = true</small></div>
+          </div>
+
+          <div className="result-detail-grid payment-detail-grid">
+            <div className="signal-pane">
+              <div className="pane-label">Signal contribution</div>
+              <div className="signal-row" data-testid="signal-payment-location">
+                <span className="signal-mark">01</span>
+                <div><strong>payment_new_location</strong><small>New coarse country after two warmup events.</small></div>
+                <b>+35</b>
+              </div>
+              <div className="signal-row" data-testid="signal-payment-velocity">
+                <span className="signal-mark">02</span>
+                <div><strong>payment_velocity</strong><small>Third event exceeds the configured maximum of two in-window.</small></div>
+                <b>+60</b>
+              </div>
+              <div className="signal-total"><span>Combined, capped score</span><strong>95 / 100</strong></div>
+            </div>
+            <div className="explain-pane">
+              <div className="pane-label">Host-supplied event sequence</div>
+              <p>Three events for one <strong>synthetic payment subject</strong>, spaced 30 seconds apart. The first two form warmup; the third is both a new country and over the limit.</p>
+              <div className="payment-events" data-testid="timeline-payment-events">
+                <div><span>01</span><strong>US</strong><small>Warmup</small><b>0s</b></div>
+                <div><span>02</span><strong>US</strong><small>Warmup</small><b>30s</b></div>
+                <div className="event-trigger"><span>03</span><strong>CA</strong><small>New country · event 3</small><b>60s</b></div>
+              </div>
+              <div className="payment-config"><span>Configured max</span><strong>2 payments / window</strong><span>Observed</span><strong>3 events</strong></div>
+            </div>
+          </div>
+          <footer className="result-card-foot"><span>INTERPRETATION</span><p>A trusted-input alert signals context for review; it does not reject or authorize a transaction.</p></footer>
+        </article>
+      </section>
+
+      <section className="results-footnotes">
+        <div className="footnote-heading"><span className="result-index">READ THIS FIRST</span><h2>Prototype evidence,<br /><em>not a live dashboard.</em></h2></div>
+        <div className="footnote-list">
+          <p><b>01</b><span>All values on this page are fixed synthetic demo data from <code>plugins/fraudguard/cmd/demo/main.go</code>.</span></p>
+          <p><b>02</b><span>Payment events are explicit trusted host inputs, not automatic Bifrost request discovery or live processor data.</span></p>
+          <p><b>03</b><span>No prompts, credentials, raw virtual keys, real customer records, network calls, backend, or API are involved.</span></p>
+        </div>
+      </section>
+      <footer className="results-footer">
+        <span>FRAUDGUARD FOR BIFROST · HACKATHON PROTOTYPE</span>
+        <Link href="/" className="results-footer-link" data-testid="link-back-overview"><ArrowRight size={14} /> Back to overview</Link>
+        <span>FIXED SYNTHETIC DATA · OBSERVE ONLY</span>
+      </footer>
+    </main>
+  );
+}
+
 function Router() {
   return (
     // Keep a shared shell (sidebar, navbar) outside the boundary so it
@@ -366,6 +523,7 @@ function Router() {
     <RoutedErrorBoundary>
       <Switch>
         <Route path="/" component={Home} />
+        <Route path="/results" component={Results} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
