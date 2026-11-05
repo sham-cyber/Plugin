@@ -99,3 +99,17 @@ mtime_ms = 1793801241258
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/75491bd7-5f15-42a5-a986-3633032aaeef/1e479f2f-b1ed-42f7-aa47-5d5a2bf171bb"
 storage_version_token = "1793801243059174"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "KC5R_MDfZCnGzOo9TTbfN"
+uri = "file://generated-artifacts/business.pdf"
+type = "pdf"
+title = "FraudGuard Business Proposal for Asharatna Tech (PDF)"
+description = "Five-page proposal letter with competitor alternatives, a staged launch budget, monetization options, illustrative revenue scenarios, risks, and diligence points."
+logical_id = "4ee8498a-80f0-4731-b311-68f99b2854e2"
+content_hash = "sha256:db818a040b6852caf90f3e47ea19b75174ea8640b469464cb93e1ca4548bc1e5"
+size = 142553
+mtime_ms = 1793849700332
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4ee8498a-80f0-4731-b311-68f99b2854e2/90a01d66-3a17-4dc9-bec8-de3b78001af6"
+storage_version_token = "1793849757963478"
+content_type = "application/pdf"
