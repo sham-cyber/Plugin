@@ -1,0 +1,185 @@
+import {
+  Activity,
+  ArrowDownRight,
+  ArrowRight,
+  Check,
+  CircleHelp,
+  Eye,
+  Fingerprint,
+  ShieldCheck,
+  TriangleAlert,
+} from 'lucide-react';
+import { Link } from 'wouter';
+
+export default function CompanyDashboard() {
+  return (
+    <main className="page-shell dashboard-page" data-testid="page-company-dashboard">
+      <header className="topbar dashboard-topbar">
+        <Link href="/" className="brand" aria-label="FraudGuard overview" data-testid="link-dashboard-brand">
+          <span className="brand-mark"><ShieldCheck size={17} strokeWidth={1.8} /></span>
+          <span>FraudGuard <small>for Bifrost</small></span>
+        </Link>
+        <nav className="nav-links dashboard-nav" aria-label="Main navigation">
+          <Link href="/" data-testid="link-dashboard-overview">Overview</Link>
+          <Link href="/results" data-testid="link-dashboard-results">Demo results</Link>
+          <Link href="/for-companies" data-testid="link-dashboard-companies">For companies</Link>
+          <Link href="/company-dashboard" aria-current="page" data-testid="link-dashboard-current">Dashboard preview</Link>
+        </nav>
+      </header>
+
+      <div className="dashboard-wrap">
+        <section className="dashboard-intro">
+          <div>
+            <div className="section-kicker">Operator view / synthetic preview</div>
+            <h1>Behavior, in<br /><em>your review path.</em></h1>
+            <p>A fixed illustration of how an organization could review findings from its own AI gateway traffic. This is not a live dashboard.</p>
+          </div>
+          <aside className="dashboard-org">
+            <span className="dashboard-org-label">ILLUSTRATIVE ORGANIZATION</span>
+            <strong>Finolex Cables</strong>
+            <span className="dashboard-org-note">User-chosen example only</span>
+          </aside>
+        </section>
+
+        <section className="dashboard-disclaimer" role="note" data-testid="notice-synthetic-company">
+          <TriangleAlert size={19} />
+          <div>
+            <strong>Synthetic preview — not connected to Finolex Cables, not endorsed by Finolex, and contains no Finolex data or live feed.</strong>
+            <p>These are the exact fixed sample outputs from the Go demo, shown as an operator-facing interface. The UI currently receives no live plugin events.</p>
+          </div>
+          <span className="dashboard-fixed-tag">FIXED DEMO</span>
+        </section>
+
+        <section className="dashboard-toolbar" aria-label="Preview status">
+          <div className="dashboard-toolbar-title"><span className="dashboard-live-dot" /> Review queue <small>synthetic sample findings</small></div>
+          <div className="dashboard-toolbar-state"><Eye size={14} /> Observe-only <i /> Requests pass through unchanged</div>
+        </section>
+
+        <section className="dashboard-findings" aria-label="Synthetic findings">
+          <article className="dashboard-finding behavior-finding" data-testid="finding-dashboard-behavior">
+            <header className="dashboard-finding-head">
+              <div>
+                <span className="dashboard-index">FINDING 01 · REQUEST BEHAVIOR</span>
+                <h2>Rapid request sequence</h2>
+              </div>
+              <span className="dashboard-status status-review"><i /> Below alert threshold</span>
+            </header>
+            <div className="dashboard-score-row">
+              <div className="dashboard-score"><span>Score</span><strong data-testid="score-dashboard-behavior">30<small> / 100</small></strong></div>
+              <div className="dashboard-threshold">
+                <div><span>Alert threshold</span><strong data-testid="threshold-dashboard-behavior">60</strong></div>
+                <div className="dashboard-meter" aria-label="Score 30 of 100, threshold 60"><i className="meter-threshold" /><i className="meter-score" /></div>
+                <small><span>0</span><span>30 score</span><span>60 threshold</span><span>100</span></small>
+              </div>
+              <div className="dashboard-alert-state"><span>No alert</span><strong data-testid="status-dashboard-behavior">alert = false</strong></div>
+            </div>
+            <div className="dashboard-finding-details">
+              <div className="dashboard-signal-block">
+                <div className="dashboard-label">Signal contribution</div>
+                <div className="dashboard-signal" data-testid="signal-dashboard-rapid-sequence">
+                  <Activity size={15} />
+                  <div><strong>rapid_sequence</strong><small>Request arrived much sooner than the recent interval pattern.</small></div>
+                  <b>+30</b>
+                </div>
+                <div className="dashboard-signal-total"><span>Total score</span><strong>30 / 100</strong></div>
+              </div>
+              <div className="dashboard-sequence-block">
+                <div className="dashboard-label">Synthetic request cadence</div>
+                <p>Five warmup requests spaced <strong>30 seconds apart</strong>, then request six <strong>1 second</strong> after the prior request.</p>
+                <div className="dashboard-timeline" data-testid="timeline-dashboard-behavior">
+                  <div className="timeline-warmup"><span>Warmup · requests 1–5</span><div><i /><i /><i /><i /><i /></div><b>5 × 30s apart</b></div>
+                  <div className="timeline-trigger"><span>Request 6</span><i /><b>1s later</b></div>
+                </div>
+              </div>
+            </div>
+            <footer className="dashboard-card-foot"><span>DISPOSITION</span><p><Check size={13} /> Observe-only / pass-through. No request action is taken.</p></footer>
+          </article>
+
+          <article className="dashboard-finding payment-finding" data-testid="finding-dashboard-payment">
+            <header className="dashboard-finding-head">
+              <div>
+                <span className="dashboard-index">FINDING 02 · TRUSTED HOST INPUT</span>
+                <h2>New payment location + velocity</h2>
+              </div>
+              <span className="dashboard-status status-alert"><i /> Alert threshold reached</span>
+            </header>
+            <div className="dashboard-trusted-note" data-testid="notice-dashboard-payment-input">
+              <ShieldCheck size={16} />
+              <p><strong>Separate trusted host inputs</strong><span>Payment signals are supplied by a host integration. They are not automatically observed by Bifrost’s request hook.</span></p>
+            </div>
+            <div className="dashboard-score-row">
+              <div className="dashboard-score"><span>Score</span><strong data-testid="score-dashboard-payment">95<small> / 100</small></strong></div>
+              <div className="dashboard-threshold">
+                <div><span>Alert threshold</span><strong data-testid="threshold-dashboard-payment">60</strong></div>
+                <div className="dashboard-meter payment-meter" aria-label="Score 95 of 100, threshold 60"><i className="meter-threshold" /><i className="meter-score" /></div>
+                <small><span>0</span><span>60 threshold</span><span>95 score</span><span>100</span></small>
+              </div>
+              <div className="dashboard-alert-state payment-alert-state"><span>Alert</span><strong data-testid="status-dashboard-payment">alert = true</strong></div>
+            </div>
+            <div className="dashboard-finding-details">
+              <div className="dashboard-signal-block">
+                <div className="dashboard-label">Signal contributions</div>
+                <div className="dashboard-signal" data-testid="signal-dashboard-payment-location">
+                  <Activity size={15} />
+                  <div><strong>payment_new_location</strong><small>New trusted coarse country after two warmup events.</small></div>
+                  <b>+35</b>
+                </div>
+                <div className="dashboard-signal" data-testid="signal-dashboard-payment-velocity">
+                  <Activity size={15} />
+                  <div><strong>payment_velocity</strong><small>Third event exceeds the configured maximum of two per window.</small></div>
+                  <b>+60</b>
+                </div>
+                <div className="dashboard-signal-total"><span>Combined, capped score</span><strong>95 / 100</strong></div>
+              </div>
+              <div className="dashboard-sequence-block">
+                <div className="dashboard-label">Synthetic host-supplied country sequence</div>
+                <p>Three events spaced at <strong>30-second intervals</strong>; two warmup events, then a new country and a count above the configured maximum.</p>
+                <div className="dashboard-payment-events" data-testid="timeline-dashboard-payment">
+                  <div><span>01</span><strong>US</strong><small>Warmup</small><b>0s</b></div>
+                  <div><span>02</span><strong>US</strong><small>Warmup</small><b>30s</b></div>
+                  <div className="payment-trigger"><span>03</span><strong>CA</strong><small>New country · event 3</small><b>60s</b></div>
+                </div>
+                <div className="dashboard-payment-limit"><span>Configured maximum</span><strong>2 payments per window</strong></div>
+              </div>
+            </div>
+            <footer className="dashboard-card-foot"><span>DISPOSITION</span><p><Eye size={13} /> Review signal only. No payment is authorized or rejected.</p></footer>
+          </article>
+        </section>
+
+        <section className="dashboard-path" data-testid="content-dashboard-integration-path">
+          <div className="dashboard-path-heading">
+            <div className="section-kicker">The last step, accurately</div>
+            <h2>A callback could<br /><em>feed your sink.</em></h2>
+          </div>
+          <div className="dashboard-path-copy">
+            <p>In a real host integration, the plugin’s sanitized <code>OnFinding</code> callback could feed a company-owned sink or dashboard. Findings omit raw keys and prompts.</p>
+            <div className="dashboard-path-flow" aria-label="Proposed finding flow">
+              <span>Bifrost plugin</span><ArrowRight size={14} /><span>Sanitized finding</span><ArrowRight size={14} /><span>Company-owned sink</span>
+            </div>
+            <p className="dashboard-path-caveat"><CircleHelp size={14} /> This page is not connected to that callback. No live plugin events reach this UI.</p>
+          </div>
+        </section>
+
+        <section className="dashboard-limits" data-testid="notice-dashboard-prototype-limits">
+          <div className="dashboard-limit-icon"><Fingerprint size={18} /></div>
+          <div>
+            <span className="dashboard-index">PROTOTYPE SCOPE</span>
+            <h2>Bifrost-only, experimental.</h2>
+            <p>FraudGuard is an experimental separate Go module supplied through <code>core.Init</code>; it is not built into upstream Bifrost. This company view is illustrative only. Other gateways require their own adapter and validation.</p>
+          </div>
+          <Link href="/for-companies" className="dashboard-more-link" data-testid="link-dashboard-scope">Company context <ArrowDownRight size={14} /></Link>
+        </section>
+
+        <footer className="dashboard-footer">
+          <span>FRAUDGUARD · FIXED SYNTHETIC PREVIEW</span>
+          <div>
+            <Link href="/" data-testid="link-dashboard-footer-overview">Overview</Link>
+            <Link href="/results" data-testid="link-dashboard-footer-results">Demo results</Link>
+            <Link href="/for-companies" data-testid="link-dashboard-footer-companies">For companies</Link>
+          </div>
+          <span>NO LIVE FEED · NO CUSTOMER DATA</span>
+        </footer>
+      </div>
+    </main>
+  );
+}

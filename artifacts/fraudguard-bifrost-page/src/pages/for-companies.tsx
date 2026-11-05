@@ -12,6 +12,7 @@ export default function ForCompanies() {
         <nav className="nav-links company-nav" aria-label="Main navigation">
           <Link href="/" data-testid="link-companies-overview">Overview</Link>
           <Link href="/results" data-testid="link-companies-results">Demo results</Link>
+          <Link href="/company-dashboard" data-testid="link-companies-dashboard">Dashboard preview</Link>
           <Link href="/for-companies" aria-current="page" data-testid="link-companies-current">For companies</Link>
         </nav>
       </header>
@@ -106,7 +107,7 @@ export default function ForCompanies() {
 
       <footer className="company-footer">
         <span>FRAUDGUARD FOR BIFROST · CURRENTLY EXPERIMENTAL</span>
-        <div><Link href="/" data-testid="link-company-footer-overview">Bifrost overview</Link><Link href="/results" data-testid="link-company-footer-results">Synthetic demo results</Link></div>
+        <div><Link href="/" data-testid="link-company-footer-overview">Bifrost overview</Link><Link href="/results" data-testid="link-company-footer-results">Synthetic demo results</Link><Link href="/company-dashboard" data-testid="link-company-footer-dashboard">Dashboard preview</Link></div>
         <span>PROPOSED DIRECTION ≠ DELIVERED FUNCTIONALITY</span>
       </footer>
     </main>

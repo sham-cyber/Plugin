@@ -6,6 +6,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
 import ForCompanies from '@/pages/for-companies';
+import CompanyDashboard from '@/pages/company-dashboard';
 import {
   Activity,
   ArrowDownRight,
@@ -73,6 +74,7 @@ function Home() {
         </a>
         <nav className="nav-links" aria-label="Main navigation">
           <Link href="/for-companies" className="results-nav-link" data-testid="link-home-companies">For companies</Link>
+          <Link href="/company-dashboard" className="results-nav-link" data-testid="link-home-dashboard">Dashboard preview</Link>
           <Link href="/results" className="results-nav-link" data-testid="link-results">Demo results <ArrowRight size={13} /></Link>
           <a href="#verification" data-testid="link-verification">Test run</a>
           <a href="#repository" data-testid="link-repository">GitHub</a>
@@ -375,6 +377,7 @@ function Results() {
           <Link href="/" data-testid="link-results-back">Overview</Link>
           <Link href="/results" aria-current="page" data-testid="link-results-current">Demo results</Link>
           <Link href="/for-companies" data-testid="link-results-companies">For companies</Link>
+          <Link href="/company-dashboard" data-testid="link-results-dashboard">Dashboard preview</Link>
         </nav>
       </header>
 
@@ -528,6 +531,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/results" component={Results} />
         <Route path="/for-companies" component={ForCompanies} />
+        <Route path="/company-dashboard" component={CompanyDashboard} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
