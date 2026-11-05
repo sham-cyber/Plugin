@@ -76,14 +76,14 @@ content_type = "text/markdown"
 id = "7p_0V-4LtflmOu2340B4H"
 uri = "file://.local/outputs/FraudGuard-Hackathon-Deck.pptx"
 type = "slides"
-title = "FraudGuard Hackathon Deck (Updated PPTX)"
-description = "Updated five-slide PowerPoint with the optional signal scope and open hardening TODOs."
+title = "FraudGuard Hackathon Deck (PPTX)"
+description = "Updated PowerPoint export with the AshaRatna Tech synthetic dashboard and simulated email/SMS previews."
 logical_id = "922a1f24-c117-41d7-9496-6ed315042c2a"
-content_hash = "sha256:a40356378222f94d2bb98386a711fbbf41fa0b844208c48ed15db2718fb9d0e6"
-size = 874386
-mtime_ms = 1793793483928
-storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/922a1f24-c117-41d7-9496-6ed315042c2a/05bdc30c-74d1-4e7d-9d43-3451296acf97"
-storage_version_token = "1793793486015000"
+content_hash = "sha256:a47fdad1bd300b4ab1632bc8bf0165394ae465231014a1611f3314536aa88551"
+size = 875605
+mtime_ms = 1793898529454
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/922a1f24-c117-41d7-9496-6ed315042c2a/aec03a47-43c7-450b-b265-3ccbafac7685"
+storage_version_token = "1793898530934560"
 content_type = "application/vnd.openxmlformats-officedocument.presentationml.presentation"
 
 [[outputs]]
