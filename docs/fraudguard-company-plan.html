@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FraudGuard — Company-Neutral Pilot and Delivery Plan</title>
+  <style>
+    :root {
+      --navy:#142a43; --ink:#26384b; --muted:#5e7185; --teal:#087e88;
+      --line:#d9e2e9; --teal-bg:#eaf5f6; --gold-bg:#fff5e4;
+      --red-bg:#fff0ef; --green-bg:#eaf5ec;
+    }
+    * { box-sizing:border-box; }
+    @page { size:100mm 220mm; margin:0; }
+    body { margin:0; background:#edf1f5; color:var(--ink); font:9.5pt/1.25 Arial,Helvetica,sans-serif; }
+    .page {
+      width:100mm; height:220mm; margin:7mm auto; padding:7mm 7mm 12mm;
+      background:#fff; position:relative; overflow:hidden; page-break-after:always;
+      box-shadow:0 4px 20px rgba(20,42,67,.12);
+    }
+    .page:last-child { page-break-after:auto; }
+    .topline { display:flex; justify-content:space-between; gap:5px; border-bottom:2px solid var(--teal); padding-bottom:4px; margin-bottom:7px; color:var(--muted); font-size:6.6pt; letter-spacing:.035em; text-transform:uppercase; }
+    .brand { color:var(--navy); font-weight:700; letter-spacing:.07em; }
+    .eyebrow { color:var(--teal); font-size:7pt; font-weight:700; letter-spacing:.055em; text-transform:uppercase; margin-bottom:4px; }
+    h1,h2,h3 { color:var(--navy); line-height:1.08; margin:0 0 6px; }
+    h1 { font-size:18pt; letter-spacing:-.02em; }
+    h2 { font-size:14pt; }
+    h3 { font-size:10pt; margin-top:4px; }
+    p { margin:0 0 5px; }
+    ul,ol { margin:3px 0 5px 14px; padding:0; }
+    li { margin-bottom:3px; }
+    .subtitle { color:var(--muted); font-size:8.6pt; margin-bottom:7px; }
+    .small { color:var(--muted); font-size:7.2pt; line-height:1.23; }
+    .card { padding:6px 7px; border:1px solid var(--line); border-radius:5px; background:#fbfcfd; margin:4px 0; }
+    .card.teal { background:var(--teal-bg); border-color:#c5e4e7; }
+    .card.gold { background:var(--gold-bg); border-color:#ecd9b5; }
+    .card.red { background:var(--red-bg); border-color:#ecc8c5; }
+    .card.green { background:var(--green-bg); border-color:#c7ddca; }
+    .card strong { color:var(--navy); }
+    .label { display:block; color:var(--teal); font-size:6.7pt; font-weight:700; letter-spacing:.045em; text-transform:uppercase; margin-bottom:2px; }
+    .step { border-left:3px solid var(--teal); padding:2px 0 3px 7px; margin:5px 0; font-size:8.7pt; }
+    .step strong { color:var(--navy); }
+    .flow { padding:7px; border:1px solid #c5e4e7; border-radius:5px; background:var(--teal-bg); text-align:center; font-size:9pt; font-weight:700; color:var(--navy); margin:6px 0; }
+    .flow span { color:var(--teal); }
+    .row { display:flex; justify-content:space-between; gap:5px; border-bottom:1px solid var(--line); padding:3px 0; font-size:8.2pt; }
+    .row span:last-child { text-align:right; font-weight:700; color:var(--navy); }
+    .row:last-child { border-bottom:0; }
+    .footer { position:absolute; left:7mm; right:7mm; bottom:4mm; border-top:1px solid var(--line); padding-top:3px; display:flex; justify-content:space-between; color:var(--muted); font-size:6.4pt; }
+    .source { font-size:7pt; margin:0 0 4px; overflow-wrap:anywhere; }
+    a { color:#096f85; text-decoration:underline; overflow-wrap:anywhere; }
+    @media print { body { background:#fff; } .page { margin:0; box-shadow:none; } }
+    @media screen and (max-width:500px) { .page { margin:0; } }
+  </style>
+</head>
+<body>
+  <section class="page">
+    <div class="topline"><span class="brand">AshaRatna Tech</span><span>Company-neutral plan</span></div>
+    <div class="eyebrow">For organizations using AI gateways</div>
+    <h1>FraudGuard</h1>
+    <p class="subtitle">A behavior-change monitor for a company's own AI use across teams and providers.</p>
+    <p>This proposal is for any organization that routes AI requests through Bifrost or another gateway with a compatible integration. The aim is to help the company notice unusual changes in how its own apps and teams use AI—not to monitor the provider's other customers.</p>
+    <div class="flow">Company apps / teams<br><span>↓</span><br>Company gateway + FraudGuard<br><span>↓</span><br>One or more AI providers</div>
+    <div class="card teal"><strong>What it does:</strong> observes request patterns and reports explainable signals for a person to review. It does not block, authorize, or change requests.</div>
+    <div class="card gold"><strong>Important boundary:</strong> requests sent directly from an app to a provider bypass a gateway plugin. Those calls need to be routed through the gateway or covered by a separate, approved integration.</div>
+    <p class="small">The current code is a Bifrost companion prototype. A different gateway needs a compatibility assessment; support for every provider or gateway is not claimed.</p>
+    <div class="footer"><span>FraudGuard company use · pilot and test plan</span><span>1</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Architecture</span></div>
+    <div class="eyebrow">Two credentials, two jobs</div>
+    <h2>One upstream key can serve many internal keys</h2>
+    <div class="card teal"><strong>Provider credential:</strong> the gateway uses it to authenticate to an AI provider. It stays in the gateway's secret manager.</div>
+    <div class="card"><strong>Company virtual key:</strong> the company gives these to its apps, teams, or services so the gateway can identify who is using AI.</div>
+    <p>One provider credential can back requests from multiple company virtual keys. The keys are different credentials and must not be copied into each other's role.</p>
+    <div class="card gold"><strong>Why separate internal keys?</strong> If every app uses one shared company key, the gateway may not be able to distinguish one app's behavior from another's.</div>
+    <div class="card red"><strong>Never expose secrets:</strong> do not put provider or virtual-key secrets in findings, dashboards, PDFs, email, or source control. Use internal IDs or carefully designed pseudonymous references.</div>
+    <p class="small">FraudGuard's Bifrost adapter uses the resolved internal virtual-key ID when available—not the raw bearer-key value. Requests without that identity are passed through but are not profiled.</p>
+    <div class="footer"><span>Provider credential ≠ company virtual key</span><span>2</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Current vs proposed</span></div>
+    <div class="eyebrow">Be clear about what exists</div>
+    <h2>Prototype today; dashboard later</h2>
+    <div class="card green"><strong>In the current prototype</strong>
+      <ul>
+        <li>Observe-only request hooks for Bifrost.</li>
+        <li>Behavior signals for model/provider changes, request timing, token-volume changes, and failures that reach the hook.</li>
+        <li>Bounded per-process memory; no raw prompts or raw keys in findings.</li>
+        <li>Structured findings/callback and aggregate metrics.</li>
+      </ul>
+    </div>
+    <div class="card gold"><strong>Not included yet</strong>
+      <ul>
+        <li>No customer dashboard or durable/shared database.</li>
+        <li>No production billing meter.</li>
+        <li>Findings omit key identifiers, so per-key dashboard views need a safe pseudonymous reference.</li>
+        <li>Memory resets on restart; replicas do not share baselines.</li>
+      </ul>
+    </div>
+    <div class="card teal"><strong>Dashboard option:</strong> send sanitized findings to a company-controlled store, then show trends and alert reasons with access controls and retention rules. Start with aggregate views; add pseudonymous per-key views only after privacy review.</div>
+    <p class="small">A dashboard is a proposed product component, not a feature already delivered by this plugin.</p>
+    <div class="footer"><span>Prototype status is not production validation</span><span>3</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Execution plan · 1 of 2</span></div>
+    <div class="eyebrow">Discovery through sandbox setup</div>
+    <h2>Start with the customer's request path</h2>
+    <div class="step"><strong>1 · Discovery and fit</strong><br>Map apps, teams, providers, gateways, authentication, existing controls, and direct-to-provider traffic. Confirm whether requests can use a distinct virtual key per app/team.</div>
+    <div class="step"><strong>2 · Scope and privacy</strong><br>Choose pilot users, signals, retention, dashboard audience, success measures, owners, and data handling. Separate provider credentials from customer virtual keys.</div>
+    <div class="step"><strong>3 · Prepare a non-production environment</strong><br>Confirm gateway version and plugin path, access approvals, test identities, logging destination, rollback owner, and a restricted provider sandbox credential—or synthetic tests only.</div>
+    <div class="card gold"><strong>Entry gate:</strong> do not start the schedule until the customer approves access, names technical/security contacts, and agrees on test cases and data rules.</div>
+    <p class="small">Any timeline is an estimate until gateway compatibility, access, security review, and provider test credentials are confirmed.</p>
+    <div class="footer"><span>Customer provides environment and approvals</span><span>4</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Execution plan · 2 of 2</span></div>
+    <div class="eyebrow">Integration through handover</div>
+    <h2>Build, test, then decide</h2>
+    <div class="step"><strong>4 · Integrate in the gateway</strong><br>Install the compatible plugin in a non-production gateway. Forward only sanitized findings to an approved sink; keep requests observe-only.</div>
+    <div class="step"><strong>5 · Test and tune</strong><br>Run normal and synthetic anomaly cases, verify privacy and failure behavior, review false alerts, and measure latency/resource use. Do not enable automatic blocking.</div>
+    <div class="step"><strong>6 · Review and hand over</strong><br>Deliver evidence, limitations, configuration notes, support ownership, monitoring and rollback instructions, and a production go/no-go decision.</div>
+    <div class="card teal"><strong>Possible first pilot:</strong> 30 business days after access and approvals, divided into discovery/setup, integration, testing, and handover. Delayed dependencies pause the clock.</div>
+    <div class="card red"><strong>Production gate:</strong> no rollout until the customer accepts compatibility, privacy, measured performance, alert quality, persistence/replica design, dashboard ownership, and support responsibilities.</div>
+    <div class="footer"><span>Do not treat a pilot schedule as an SLA</span><span>5</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Test and acceptance</span></div>
+    <div class="eyebrow">Evidence before production</div>
+    <h2>What the test plan must prove</h2>
+    <div class="card">
+      <strong>Detection and quality</strong>
+      <ul>
+        <li>Benign baseline and warmup behave as expected.</li>
+        <li>Model/provider probing, rapid sequences, token spikes, and repeated errors produce explainable findings.</li>
+        <li>Review false positives using the customer's approved synthetic or test traffic.</li>
+      </ul>
+    </div>
+    <div class="card gold">
+      <strong>Safety and reliability</strong>
+      <ul>
+        <li>Requests are not blocked or modified, including when scoring or reporting fails.</li>
+        <li>Concurrency, state expiry, restarts, and memory bounds are checked.</li>
+        <li>No prompts, raw keys, provider credentials, or sensitive error text appear in findings.</li>
+        <li>Measure latency and resource use on the agreed gateway setup.</li>
+      </ul>
+    </div>
+    <div class="card green"><strong>Acceptance evidence:</strong> test results, observed false-alert rate, privacy check, measured latency, supported gateway/version, known gaps, and named customer approver.</div>
+    <p class="small">Payment velocity, location, and expired/revoked/exposed-key signals require trusted data from the host. They are not automatically discovered by the LLM request hook.</p>
+    <div class="footer"><span>Findings guide human review; they do not prove fraud</span><span>6</span></div>
+  </section>
+
+  <section class="page">
+    <div class="topline"><span class="brand">FraudGuard</span><span>Operations and business model</span></div>
+    <div class="eyebrow">Responsibilities and limits</div>
+    <h2>One installation can cover many keys</h2>
+    <p>A possible subscription unit is the number of distinct protected company virtual keys active in a billing month—not the number of physical deployments. Any example price, including $1 per key per month, is an unvalidated hypothesis until buyers confirm it.</p>
+    <div class="card teal"><strong>Customer owns:</strong> gateway/provider account, provider charges, staff access, source-of-truth key mapping, secret manager, and approval of any production deployment.</div>
+    <div class="card"><strong>Product operator owns:</strong> plugin maintenance, supported-version list, privacy-safe event handling, dashboard security if built, incident response, and customer support.</div>
+    <div class="card red"><strong>Known limits:</strong> the plugin is a Bifrost companion module, not built into upstream Bifrost; current state is local/in-memory; no dashboard or billing meter exists; no gateway other than the tested contract is promised.</div>
+    <p class="source">Bifrost contract reference: <a href="https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9">inspected source commit</a>. Replit, if used for a demo, is optional test hosting—not the customer's production gateway or an endorsement.</p>
+    <p class="small">This document is a study and proposed work plan. It does not claim a customer, provider integration, upstream acceptance, production readiness, or guaranteed savings/profit.</p>
+    <div class="footer"><span>For any company with a supported, routed request path</span><span>7</span></div>
+  </section>
+</body>
+</html>
