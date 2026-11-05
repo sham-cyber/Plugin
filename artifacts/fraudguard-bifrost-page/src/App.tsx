@@ -11,6 +11,7 @@ import {
   ArrowRight,
   Check,
   CircleHelp,
+  Copy,
   Eye,
   Fingerprint,
   KeyRound,
@@ -27,9 +28,39 @@ import {
 } from 'wouter';
 
 const queryClient = new QueryClient();
+const verifyCommands = [
+  'cd plugins/fraudguard',
+  'set -e',
+  'GOSUMDB=sum.golang.org go test -count=1 ./...',
+  'GOSUMDB=sum.golang.org go test -race -count=1 ./...',
+  'GOSUMDB=sum.golang.org go vet ./...',
+  'GOSUMDB=sum.golang.org go run ./cmd/demo',
+].join('\n');
+const verifiedOutput = `ok   github.com/maximhq/bifrost/plugins/fraudguard  0.180s
+?    github.com/maximhq/bifrost/plugins/fraudguard/cmd/demo  [no test files]
+
+ok   github.com/maximhq/bifrost/plugins/fraudguard  1.730s
+?    github.com/maximhq/bifrost/plugins/fraudguard/cmd/demo  [no test files]
+
+go vet ./...: PASS (no output)
+
+observe-only finding: score=30 alert=false signals=[rapid_sequence]
+metrics: {Profiles:1 Cohorts:0 PaymentSubjects:0 Requests:6 PaymentEvents:0 Findings:1 Alerts:0 ExemptRequests:0}
+synthetic payment finding: score=95 alert=true signals=[payment_new_location payment_velocity]
+synthetic key-status finding: score=100 alert=true signals=[key_expired key_exposed key_revoked]`;
 
 function Home() {
   const [showFindings, setShowFindings] = useState(false);
+  const [commandsCopied, setCommandsCopied] = useState(false);
+
+  const copyVerifyCommands = async () => {
+    try {
+      await navigator.clipboard.writeText(verifyCommands);
+      setCommandsCopied(true);
+    } catch {
+      setCommandsCopied(false);
+    }
+  };
 
   return (
     <main className="page-shell">
@@ -39,48 +70,102 @@ function Home() {
           <span>FraudGuard <small>for Bifrost</small></span>
         </a>
         <nav className="nav-links" aria-label="Main navigation">
+          <a href="#verification" data-testid="link-verification">Test run</a>
+          <a href="#repository" data-testid="link-repository">GitHub</a>
           <a href="#signals" data-testid="link-signals">Signals</a>
           <a href="#privacy" data-testid="link-privacy">Data boundaries</a>
-          <a href="#integration" data-testid="link-integration">Integration</a>
-          <a className="nav-cta" href="#demo" data-testid="link-demo">Try the local demo <ArrowDownRight size={14} /></a>
+          <a className="nav-cta" href="https://github.com/sham-cyber/Plugin" target="_blank" rel="noreferrer" data-testid="link-demo">Open GitHub <ArrowDownRight size={14} /></a>
         </nav>
       </header>
 
       <section className="hero" id="top">
         <div>
-          <div className="eyebrow">Experimental companion plugin · Observe-only</div>
+          <div className="eyebrow">Hackathon prototype · Go plugin · Observe-only</div>
           <h1>See the shift<br />before it <em>spreads.</em></h1>
           <p className="hero-copy">
-            FraudGuard gives Bifrost operators a second view of authenticated virtual-key behavior—surfacing unusual changes for a human to investigate, while every request continues unchanged.
+            FraudGuard is a tested Go plugin prototype for Bifrost. Run its tests and command-line demo below to see real output; the demo uses synthetic events, and flagged requests pass through unchanged.
           </p>
           <div className="hero-actions">
-            <a className="button-primary" href="#demo" data-testid="link-hero-demo">Explore a synthetic finding <ArrowRight size={15} /></a>
-            <a className="button-secondary" href="#how-it-works" data-testid="link-how-it-works">How it works <ArrowDownRight size={15} /></a>
+            <a className="button-primary" href="#verification" data-testid="link-hero-demo">See verified run <ArrowRight size={15} /></a>
+            <a className="button-secondary" href="#repository" data-testid="link-how-it-works">What’s in GitHub <ArrowDownRight size={15} /></a>
           </div>
-          <p className="boundary-note">No request blocking. No prompt inspection. Not built into upstream Bifrost; this is a separate prototype module.</p>
+          <p className="boundary-note">Separate prototype module—not built into upstream Bifrost. No request blocking, prompt inspection, or provider key input.</p>
         </div>
 
-        <div className="terminal-wrap" aria-label="Illustrative synthetic behavior score">
+        <div className="terminal-wrap" aria-label="Captured result from the real Go demo using synthetic events">
           <div className="terminal">
             <div className="terminal-top">
               <span className="terminal-lights"><i /><i /><i /></span>
-              <span>FRAUDGUARD / LOCAL EXAMPLE</span>
+              <span>FRAUDGUARD / GO DEMO</span>
               <span>OBSERVE</span>
             </div>
             <div className="terminal-main">
               <div>
-                <div className="score-label">Illustrative score</div>
-                <div className="score-value">55<span> / 100</span></div>
-                <div className="score-caption">Below 60 threshold · observe only</div>
+                <div className="score-label">Captured Go demo score</div>
+                <div className="score-value">30<span> / 100</span></div>
+                <div className="score-caption">alert=false · threshold 60</div>
               </div>
-              <div className="sparkline" aria-hidden="true">{Array.from({ length: 10 }, (_, i) => <i key={i} />)}</div>
+              <div className="terminal-result"><span>REQUEST ACTION</span><strong>NONE</strong><small>observe-only</small></div>
             </div>
             <div className="terminal-events">
               <div className="event-row"><span>rapid_sequence</span><strong>+30</strong><span>01s gap</span></div>
-              <div className="event-row"><span>new_model</span><strong>+25</strong><span>unseen here</span></div>
+              <div className="event-row"><span>alerts</span><strong>0</strong><span>below threshold</span></div>
             </div>
-            <div className="synthetic-stamp"><span><i className="stamp-dot" />SYNTHETIC EVENT DATA</span><span>NO IDENTIFIERS</span></div>
+            <div className="synthetic-stamp"><span><i className="stamp-dot" />ACTUAL CLI OUTPUT · SYNTHETIC INPUTS</span><span>NO IDENTIFIERS</span></div>
           </div>
+        </div>
+      </section>
+
+      <section className="section verification-section" id="verification">
+        <div className="verification-heading">
+          <div className="section-kicker">Real commands · actual Go module</div>
+          <h2>Run it.<br /><em>See the result.</em></h2>
+          <p>These commands were run from this project’s <code>plugins/fraudguard</code> folder. The output beside them is captured from that run—not a mock browser result.</p>
+        </div>
+        <div className="verification-console">
+          <div className="verification-console-head">
+            <span><i /> Replit Shell · FraudGuard</span>
+            <button type="button" onClick={copyVerifyCommands} className="copy-commands" data-testid="button-copy-commands">
+              {commandsCopied ? <Check size={13} /> : <Copy size={13} />}
+              {commandsCopied ? 'Copied' : 'Copy commands'}
+            </button>
+          </div>
+          <div className="verification-columns">
+            <div className="verification-pane">
+              <div className="verification-label">Commands</div>
+              <pre><code>{verifyCommands}</code></pre>
+            </div>
+            <div className="verification-pane">
+              <div className="verification-label">Captured execution · all checks passed</div>
+              <pre><code>{verifiedOutput}</code></pre>
+            </div>
+          </div>
+          <p className="verification-note">This page displays the captured run; it does not execute shell commands. To run it live for your video, open Replit Shell at the project root, paste the copied commands, and record the output.</p>
+        </div>
+      </section>
+
+      <section className="section repository-section" id="repository">
+        <div className="repository-heading">
+          <div className="section-kicker">The hackathon code</div>
+          <h2>What’s in <em>GitHub.</em></h2>
+          <p>The GitHub repository contains the working Go prototype. This page is a separate explainer, not the plugin itself.</p>
+          <a className="button-primary" href="https://github.com/sham-cyber/Plugin" target="_blank" rel="noreferrer" data-testid="link-github-repository">
+            Open sham-cyber/Plugin <ArrowRight size={14} />
+          </a>
+        </div>
+        <div className="repository-panel">
+          <div className="repository-status"><span className="repository-dot" /> Go plugin is in GitHub <span className="repository-license">Apache-2.0</span></div>
+          <ul>
+            <li><code>plugins/fraudguard/engine.go</code><span>Behavior scoring and bounded profiles</span></li>
+            <li><code>plugins/fraudguard/plugin.go</code><span>Bifrost plugin hooks</span></li>
+            <li><code>plugins/fraudguard/*_test.go</code><span>Unit, privacy, and concurrency tests</span></li>
+            <li><code>plugins/fraudguard/cmd/demo</code><span>Offline synthetic findings demo</span></li>
+            <li><span><code>README.md</code> · <code>VERIFICATION_REPORT.md</code></span><span>Setup, evidence, limits, and license</span></li>
+          </ul>
+          <a className="repository-commit" href="https://github.com/sham-cyber/Plugin/commit/224d4ebc165e0db95ad9c88e3cb70ea58edca818" target="_blank" rel="noreferrer">
+            GitHub feature commit: 224d4eb · optional payment and key-status signals
+          </a>
+          <p className="repository-local-note">The Bifrost explainer page is currently in this Replit workspace and has not yet been pushed to GitHub. The plugin files above are already on the repository’s main branch.</p>
         </div>
       </section>
 
@@ -145,9 +230,9 @@ function Home() {
       <section className="section demo-section" id="demo">
         <div className="demo-intro">
           <div className="section-heading">
-            <div className="section-kicker">A safe, local walkthrough</div>
-            <h2>Make the behavior<br /><em>visible.</em></h2>
-            <p>Run a tiny synthetic scenario in this page. It demonstrates the shape of a finding—not a live detector, Bifrost connection, or measured result.</p>
+            <div className="section-kicker">Browser-only illustration</div>
+            <h2>Example signals,<br /><em>not a test run.</em></h2>
+            <p>This small interaction is only a visual illustration. For real detector output, use the Shell commands above and the Go demo.</p>
           </div>
         </div>
         <div className="demo-panel">
@@ -156,8 +241,8 @@ function Home() {
             <h3>Baseline, then a change.</h3>
             <p>Imagine a warmed-up key that suddenly requests a new model only one second after its prior request.</p>
             {!showFindings ? (
-              <button className="demo-run" onClick={() => setShowFindings(true)} data-testid="button-run-demo">
-                <TerminalSquare size={15} /> Run synthetic scenario
+                <button className="demo-run" onClick={() => setShowFindings(true)} data-testid="button-run-demo">
+                <TerminalSquare size={15} /> Show illustrative example
               </button>
             ) : (
               <button className="demo-run" onClick={() => setShowFindings(false)} data-testid="button-reset-demo">
@@ -167,7 +252,7 @@ function Home() {
             <small>No network calls. No credentials, prompts, or actual keys used.</small>
           </div>
           <div className="demo-output" aria-live="polite">
-              <div className="output-head"><span>Example finding stream</span><span className="output-state">{showFindings ? 'score 55 · alert=false' : 'Waiting for local run'}</span></div>
+              <div className="output-head"><span>Illustrative finding stream</span><span className="output-state">{showFindings ? 'illustration only' : 'Waiting for click'}</span></div>
             {showFindings ? (
               <div className="finding-list">
                 <div className="finding"><span className="finding-icon"><Activity size={12} /></span><div><strong>rapid_sequence</strong><span>Interval is unusually short vs. synthetic baseline</span></div><span className="finding-score">+30</span></div>
@@ -257,8 +342,8 @@ function Home() {
           <h2>Keep requests flowing.<br /><em>Make changes visible.</em></h2>
         </div>
         <div>
-          <p>Walk through the local example, then inspect the companion module and decide whether its limits fit your environment.</p>
-          <a className="button-primary" href="#demo" data-testid="link-final-demo">Run synthetic example <ArrowRight size={14} /></a>
+          <p>Run the tested Go commands, review what is already in GitHub, then inspect the plugin limits before trying it with Bifrost.</p>
+          <a className="button-primary" href="#verification" data-testid="link-final-demo">Review the real Go run <ArrowRight size={14} /></a>
         </div>
       </section>
       <footer className="footer">
