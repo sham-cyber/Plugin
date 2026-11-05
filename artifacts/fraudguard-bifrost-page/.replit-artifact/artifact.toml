@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/fraudguard-bifrost/"
+title = "FraudGuard for Bifrost"
+description = "A clear, company-agnostic landing page for the experimental FraudGuard behavior-monitoring plugin for the Bifrost AI gateway."
+version = "1.0.0"
+id = "artifacts/fraudguard-bifrost-page"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/fraudguard-bifrost/" ]
+localPort = 24258
+
+[services.development]
+run = "pnpm --filter @workspace/fraudguard-bifrost-page run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/fraudguard-bifrost-page", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/fraudguard-bifrost-page/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24258"
+BASE_PATH = "/fraudguard-bifrost/"
