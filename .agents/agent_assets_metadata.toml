@@ -113,3 +113,17 @@ mtime_ms = 1793849700332
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4ee8498a-80f0-4731-b311-68f99b2854e2/90a01d66-3a17-4dc9-bec8-de3b78001af6"
 storage_version_token = "1793849757963478"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "1p5pYRvIhqQhX-O7rmeKw"
+uri = "file://generated-artifacts/business-mobile.pdf"
+type = "pdf"
+title = "FraudGuard Business Proposal — Mobile PDF"
+description = "Phone-reading edition with larger text and stacked sections. Use Fit to Width and scroll vertically; the original A4 business.pdf remains unchanged."
+logical_id = "cf19cb19-ad0f-452d-863f-2cc573538441"
+content_hash = "sha256:b49a245f014c1c137c3bfb29c20165488d3e4244d3c3d8c43bf8387bc9b3b428"
+size = 125739
+mtime_ms = 1793850387459
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/cf19cb19-ad0f-452d-863f-2cc573538441/53390534-c681-492c-8d19-d5dcdd008aae"
+storage_version_token = "1793850434169496"
+content_type = "application/pdf"
