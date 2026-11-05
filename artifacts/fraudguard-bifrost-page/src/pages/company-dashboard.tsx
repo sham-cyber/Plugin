@@ -6,12 +6,22 @@ import {
   CircleHelp,
   Eye,
   Fingerprint,
+  Mail,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link } from 'wouter';
 
 export default function CompanyDashboard() {
+  const [findingType, setFindingType] = useState<'all' | 'behavior' | 'payment'>('all');
+  const [alertOnly, setAlertOnly] = useState(false);
+  const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(true);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const showBehavior = (findingType === 'all' || findingType === 'behavior') && !alertOnly;
+  const showPayment = (findingType === 'all' || findingType === 'payment');
+  const visibleCount = Number(showBehavior) + Number(showPayment);
+
   return (
     <main className="page-shell dashboard-page" data-testid="page-company-dashboard">
       <header className="topbar dashboard-topbar">
@@ -45,9 +55,22 @@ export default function CompanyDashboard() {
           <TriangleAlert size={19} />
           <div>
             <strong>Synthetic preview — not connected to Finolex Cables, not endorsed by Finolex, and contains no Finolex data or live feed.</strong>
-            <p>These are the exact fixed sample outputs from the Go demo, shown as an operator-facing interface. The UI currently receives no live plugin events.</p>
+            <p>Finolex Cables is a user-chosen example only; there is no actual subscription, partnership, endorsement, connection, or company data. These are the exact fixed sample outputs from the Go demo, shown as an operator-facing interface. The UI currently receives no live plugin events.</p>
           </div>
           <span className="dashboard-fixed-tag">FIXED DEMO</span>
+        </section>
+
+        <section className="dashboard-subscription" aria-label="Simulated subscription" data-testid="card-demo-subscription">
+          <div className="subscription-mark"><Check size={16} /></div>
+          <div className="subscription-copy">
+            <span className="dashboard-index">SUBSCRIBER EXPERIENCE · SIMULATED</span>
+            <h2>Filtering + email alerts</h2>
+            <p>This prototype illustrates a company plan. Nothing is actually subscribed, billed, or connected.</p>
+          </div>
+          <div className="subscription-state" data-testid="status-demo-subscription">
+            <span>ACTIVE IN SIMULATION</span>
+            <strong>Not billed · not actually subscribed</strong>
+          </div>
         </section>
 
         <section className="dashboard-toolbar" aria-label="Preview status">
@@ -55,8 +78,30 @@ export default function CompanyDashboard() {
           <div className="dashboard-toolbar-state"><Eye size={14} /> Observe-only <i /> Requests pass through unchanged</div>
         </section>
 
+        <section className="dashboard-controls" aria-label="Synthetic finding display controls">
+          <div className="finding-filter">
+            <div>
+              <span className="dashboard-index">DISPLAY FILTERS</span>
+              <p>Choose which fixed findings to show. These controls do not filter gateway requests.</p>
+            </div>
+            <div className="filter-buttons" role="group" aria-label="Finding type">
+              <button type="button" className={findingType === 'all' ? 'is-selected' : ''} aria-pressed={findingType === 'all'} onClick={() => setFindingType('all')} data-testid="filter-findings-all">All findings</button>
+              <button type="button" className={findingType === 'behavior' ? 'is-selected' : ''} aria-pressed={findingType === 'behavior'} onClick={() => setFindingType('behavior')} data-testid="filter-findings-behavior">Request behavior</button>
+              <button type="button" className={findingType === 'payment' ? 'is-selected' : ''} aria-pressed={findingType === 'payment'} onClick={() => setFindingType('payment')} data-testid="filter-findings-payment">Trusted payment</button>
+            </div>
+            <label className="alert-filter">
+              <input type="checkbox" checked={alertOnly} onChange={(event) => setAlertOnly(event.target.checked)} data-testid="toggle-alert-only" />
+              <span className="filter-switch" aria-hidden="true" />
+              <span>Alert-only</span>
+            </label>
+          </div>
+          <div className="dashboard-visible-count" data-testid="status-visible-findings" aria-live="polite">
+            <strong>{visibleCount}</strong> of 2 synthetic findings shown
+          </div>
+        </section>
+
         <section className="dashboard-findings" aria-label="Synthetic findings">
-          <article className="dashboard-finding behavior-finding" data-testid="finding-dashboard-behavior">
+          {showBehavior && <article className="dashboard-finding behavior-finding" data-testid="finding-dashboard-behavior">
             <header className="dashboard-finding-head">
               <div>
                 <span className="dashboard-index">FINDING 01 · REQUEST BEHAVIOR</span>
@@ -93,9 +138,9 @@ export default function CompanyDashboard() {
               </div>
             </div>
             <footer className="dashboard-card-foot"><span>DISPOSITION</span><p><Check size={13} /> Observe-only / pass-through. No request action is taken.</p></footer>
-          </article>
+          </article>}
 
-          <article className="dashboard-finding payment-finding" data-testid="finding-dashboard-payment">
+          {showPayment && <article className="dashboard-finding payment-finding" data-testid="finding-dashboard-payment">
             <header className="dashboard-finding-head">
               <div>
                 <span className="dashboard-index">FINDING 02 · TRUSTED HOST INPUT</span>
@@ -143,7 +188,62 @@ export default function CompanyDashboard() {
               </div>
             </div>
             <footer className="dashboard-card-foot"><span>DISPOSITION</span><p><Eye size={13} /> Review signal only. No payment is authorized or rejected.</p></footer>
-          </article>
+          </article>}
+
+          {visibleCount === 0 && (
+            <div className="dashboard-empty-state" data-testid="empty-findings">
+              <Eye size={18} />
+              <strong>No findings match these display filters.</strong>
+              <p>Try showing all findings or turning off Alert-only. No gateway requests are filtered or changed.</p>
+            </div>
+          )}
+        </section>
+
+        <section className="dashboard-alerts" aria-label="Email alert preferences">
+          <div className="alerts-preference">
+            <div className="alerts-icon"><Mail size={17} /></div>
+            <div className="alerts-copy">
+              <span className="dashboard-index">EMAIL ALERTS · LOCAL DEMO STATE</span>
+              <h2>Email alert preference</h2>
+              <p>Simulated preference only. No email address is collected and no email can be sent.</p>
+            </div>
+            <label className="email-toggle">
+              <input type="checkbox" checked={emailAlertsEnabled} onChange={(event) => {
+                setEmailAlertsEnabled(event.target.checked);
+                setShowEmailPreview(false);
+              }} data-testid="toggle-email-alerts" />
+              <span className="filter-switch" aria-hidden="true" />
+              <span>{emailAlertsEnabled ? 'Enabled in demo' : 'Disabled in demo'}</span>
+            </label>
+          </div>
+          <div className="email-preview-action">
+            <p>Preview the alert for the synthetic payment finding.</p>
+            <button type="button" onClick={() => setShowEmailPreview((current) => !current)} disabled={!emailAlertsEnabled} data-testid="button-preview-email">
+              <Mail size={14} /> {showEmailPreview ? 'Close email preview' : 'Preview alert email'}
+            </button>
+          </div>
+          <div className="email-preview-live" aria-live="polite" data-testid="status-email-preview">
+            {showEmailPreview && emailAlertsEnabled ? (
+              <article className="email-preview" data-testid="preview-synthetic-email">
+                <div className="email-preview-head"><span>SYNTHETIC EMAIL PREVIEW</span><strong>NOT SENT</strong></div>
+                <dl>
+                  <div><dt>To</dt><dd>Not configured in this prototype</dd></div>
+                  <div><dt>Subject</dt><dd>FraudGuard alert preview: synthetic payment finding</dd></div>
+                </dl>
+                <div className="email-preview-body">
+                  <p>A synthetic payment finding reached its alert threshold.</p>
+                  <ul>
+                    <li>Score: 95 · threshold: 60 · alert=true</li>
+                    <li>Signals: payment_new_location +35; payment_velocity +60</li>
+                    <li>Synthetic country sequence: US, US, CA at 30-second intervals</li>
+                  </ul>
+                  <p>No payment action was taken. Requests remain observe-only and pass through unchanged.</p>
+                </div>
+              </article>
+            ) : (
+              <span>{emailAlertsEnabled ? 'Email preview is closed. Nothing has been sent.' : 'Email alerts are disabled in this local demo; preview is unavailable.'}</span>
+            )}
+          </div>
         </section>
 
         <section className="dashboard-path" data-testid="content-dashboard-integration-path">
