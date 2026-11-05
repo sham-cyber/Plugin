@@ -197,3 +197,17 @@ mtime_ms = 1793859428172
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/6c34c65a-e1c9-4aca-b455-b98804194d70/623269e6-76b4-4118-87c8-8a70557cdc1e"
 storage_version_token = "1793859453073338"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "gaQCKXu3nT8fjUQ4JP1GG"
+uri = "file://generated-artifacts/Send%202.pdf"
+type = "pdf"
+title = "FraudGuard — Company-Neutral Execution and Test Plan"
+description = "Seven-page phone-readable proposal for any organization using a supported AI gateway. It explains the provider-key versus company-virtual-key roles, current prototype boundaries, dashboard requirements, staged rollout, test acceptance, and production go/no-go criteria."
+logical_id = "de882786-42fa-4489-842d-2f4c829676fe"
+content_hash = "sha256:a26b1168b461f509591a0cb70d541325b7add0dafc5fc83bfed01a1d50b87655"
+size = 87426
+mtime_ms = 1793861446548
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/de882786-42fa-4489-842d-2f4c829676fe/507f9df5-460c-4cec-b41b-358976475cbe"
+storage_version_token = "1793861498978007"
+content_type = "application/pdf"
