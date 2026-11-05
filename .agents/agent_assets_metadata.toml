@@ -169,3 +169,17 @@ mtime_ms = 1793856262508
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/96729039-cdcf-4409-a5f0-d918d3c5c358/b20004d4-ea1c-4bd1-b424-f1abc3479b21"
 storage_version_token = "1793856327078181"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "i-2kp5wFtVy2vrxJLeUuj"
+uri = "file://generated-artifacts/profit2.pdf"
+type = "pdf"
+title = "FraudGuard — One-Year Global Business Proposal"
+description = "Investor-readable 8-page proposal covering Finolex market context, global API-key pricing, monthly and annual prepaid sales examples, a one-year ₹51L launch budget, staffing, Replit hosting and maintenance responsibilities, API-failure risks, and conditional year-one outcomes."
+logical_id = "930b0e9c-a22e-4753-9604-2918c93577b5"
+content_hash = "sha256:3e2827a0195f7bb1ce2c621a9f9d986268f1fb2a2cea2e709ad2b5fc97c0efc9"
+size = 122153
+mtime_ms = 1793857638863
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/930b0e9c-a22e-4753-9604-2918c93577b5/51fc960d-0d4f-4da7-b5ca-cd0187d8a3e6"
+storage_version_token = "1793857672271283"
+content_type = "application/pdf"

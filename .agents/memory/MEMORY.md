@@ -1,1 +1,2 @@
 - [Bifrost Go toolchain](bifrost-go-toolchain.md) — upstream plugin modules require Go 1.27.3; this Replit environment may need explicit checksum verification to fetch it.
+- [FraudGuard buyer model](fraudguard-buyer-model.md) — target global AI gateway operators; Finolex figures are context, not assumed customers or API-key volume.
