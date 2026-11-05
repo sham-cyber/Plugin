@@ -127,3 +127,17 @@ mtime_ms = 1793850387459
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/cf19cb19-ad0f-452d-863f-2cc573538441/53390534-c681-492c-8d19-d5dcdd008aae"
 storage_version_token = "1793850434169496"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "LDlOelTm4R5lp0yiPU5oA"
+uri = "file://generated-artifacts/AshaRatna%20finolex.pdf"
+type = "pdf"
+title = "AshaRatna Tech — Finolex Cables proposal"
+description = "Nine-page, phone-readable proposal letter with public company financials, current FraudGuard limitations, a paid shadow-pilot request, and transparent five-year scenarios."
+logical_id = "8526d4a3-fe3e-4ea7-9acc-f60a642f3dc4"
+content_hash = "sha256:b97ffe9a570e1cc46cb144f4f918c8505aa9720bb6e891b7600bd94cf6c4d14a"
+size = 126149
+mtime_ms = 1793853439735
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/8526d4a3-fe3e-4ea7-9acc-f60a642f3dc4/728d22d9-c755-4d15-baef-3e51f213ca6a"
+storage_version_token = "1793853470901634"
+content_type = "application/pdf"
