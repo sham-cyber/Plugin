@@ -183,3 +183,17 @@ mtime_ms = 1793857638863
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/930b0e9c-a22e-4753-9604-2918c93577b5/51fc960d-0d4f-4da7-b5ca-cd0187d8a3e6"
 storage_version_token = "1793857672271283"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "emwqfnCYVb_GQXTvjXcK1"
+uri = "file://generated-artifacts/Send.pdf"
+type = "pdf"
+title = "AshaRatna Tech — FraudGuard proposal to Finolex"
+description = "Five-page A4 proposal with a 30-business-day pilot plan, Finolex staffing assumptions, privacy-safe API-key counting model, separate provider sandbox-key request, proposed trial terms, Replit hosting estimate, indicative quote, and conditional contribution scenarios."
+logical_id = "6c34c65a-e1c9-4aca-b455-b98804194d70"
+content_hash = "sha256:0bc230b0a643bd6d9505d5fcebd338a201f9a87f49a8fcc35eaa7d5b58836cc8"
+size = 103200
+mtime_ms = 1793858868771
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/6c34c65a-e1c9-4aca-b455-b98804194d70/471088d7-9e1b-4594-b001-988ca9eb01cc"
+storage_version_token = "1793858921310689"
+content_type = "application/pdf"
