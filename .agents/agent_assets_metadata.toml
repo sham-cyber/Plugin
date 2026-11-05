@@ -155,3 +155,17 @@ mtime_ms = 1793854805408
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4c962adb-505f-49da-a47f-5b0fa9007615/cb88678c-5102-4e48-8672-0592e1084889"
 storage_version_token = "1793854877517540"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "FuUfP3ZhfpXSXNz3MAR79"
+uri = "file://generated-artifacts/profit1.pdf"
+type = "pdf"
+title = "FraudGuard — Profit1 API-Key Business Model"
+description = "Corrected 9-page phone-readable model: one deployment covers many protected API keys, with pricing by active keys rather than per install. Includes Bifrost public pricing comparison, single-install unit economics, fixed and variable cost assumptions, five-year low/base/scale scenarios, and sources."
+logical_id = "96729039-cdcf-4409-a5f0-d918d3c5c358"
+content_hash = "sha256:5cfc40bc51e04692fef3fc99b996ec0558b00e92e9c70a083f65c49212037dc9"
+size = 123692
+mtime_ms = 1793856262508
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/96729039-cdcf-4409-a5f0-d918d3c5c358/b20004d4-ea1c-4bd1-b424-f1abc3479b21"
+storage_version_token = "1793856327078181"
+content_type = "application/pdf"
