@@ -7,6 +7,7 @@ import {
   Eye,
   Fingerprint,
   Mail,
+  Smartphone,
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
@@ -18,6 +19,8 @@ export default function CompanyDashboard() {
   const [alertOnly, setAlertOnly] = useState(false);
   const [emailAlertsEnabled, setEmailAlertsEnabled] = useState(true);
   const [showEmailPreview, setShowEmailPreview] = useState(false);
+  const [smsAlertsEnabled, setSmsAlertsEnabled] = useState(true);
+  const [showSmsPreview, setShowSmsPreview] = useState(false);
   const showBehavior = (findingType === 'all' || findingType === 'behavior') && !alertOnly;
   const showPayment = (findingType === 'all' || findingType === 'payment');
   const visibleCount = Number(showBehavior) + Number(showPayment);
@@ -46,16 +49,16 @@ export default function CompanyDashboard() {
           </div>
           <aside className="dashboard-org">
             <span className="dashboard-org-label">ILLUSTRATIVE ORGANIZATION</span>
-            <strong>Finolex Cables</strong>
-            <span className="dashboard-org-note">User-chosen example only</span>
+            <strong>AshaRatna Tech</strong>
+            <span className="dashboard-org-note">Illustrative demo label · not a subscriber</span>
           </aside>
         </section>
 
         <section className="dashboard-disclaimer" role="note" data-testid="notice-synthetic-company">
           <TriangleAlert size={19} />
           <div>
-            <strong>Synthetic preview — not connected to Finolex Cables, not endorsed by Finolex, and contains no Finolex data or live feed.</strong>
-            <p>Finolex Cables is a user-chosen example only; there is no actual subscription, partnership, endorsement, connection, or company data. These are the exact fixed sample outputs from the Go demo, shown as an operator-facing interface. The UI currently receives no live plugin events.</p>
+            <strong>AshaRatna Tech is an illustrative demo label only—not a real subscriber account or an actual partnership.</strong>
+            <p>This fixed demo contains no AshaRatna Tech data. Display filters only change which synthetic findings are visible; no live traffic is filtered or blocked, and synthetic scores remain unchanged. There is no live feed and no live plugin events.</p>
           </div>
           <span className="dashboard-fixed-tag">FIXED DEMO</span>
         </section>
@@ -64,7 +67,7 @@ export default function CompanyDashboard() {
           <div className="subscription-mark"><Check size={16} /></div>
           <div className="subscription-copy">
             <span className="dashboard-index">SUBSCRIBER EXPERIENCE · SIMULATED</span>
-            <h2>Filtering + email alerts</h2>
+            <h2>Display filters + alert preferences</h2>
             <p>This prototype illustrates a company plan. Nothing is actually subscribed, billed, or connected.</p>
           </div>
           <div className="subscription-state" data-testid="status-demo-subscription">
@@ -199,7 +202,7 @@ export default function CompanyDashboard() {
           )}
         </section>
 
-        <section className="dashboard-alerts" aria-label="Email alert preferences">
+        <section className="dashboard-alerts" aria-label="Email and SMS alert preferences">
           <div className="alerts-preference">
             <div className="alerts-icon"><Mail size={17} /></div>
             <div className="alerts-copy">
@@ -244,6 +247,45 @@ export default function CompanyDashboard() {
               <span>{emailAlertsEnabled ? 'Email preview is closed. Nothing has been sent.' : 'Email alerts are disabled in this local demo; preview is unavailable.'}</span>
             )}
           </div>
+
+          <div className="alerts-preference sms-preference">
+            <div className="alerts-icon"><Smartphone size={17} /></div>
+            <div className="alerts-copy">
+              <span className="dashboard-index">SMS ALERTS · LOCAL DEMO STATE</span>
+              <h2>SMS alert preference</h2>
+              <p>Simulated preference only. No phone number is collected and no SMS can be sent.</p>
+            </div>
+            <label className="email-toggle sms-toggle">
+              <input type="checkbox" checked={smsAlertsEnabled} onChange={(event) => {
+                setSmsAlertsEnabled(event.target.checked);
+                setShowSmsPreview(false);
+              }} data-testid="toggle-sms-alerts" />
+              <span className="filter-switch" aria-hidden="true" />
+              <span>{smsAlertsEnabled ? 'Enabled in demo' : 'Disabled in demo'}</span>
+            </label>
+          </div>
+          <div className="sms-preview-action">
+            <p>Preview a short SMS for the synthetic payment finding.</p>
+            <button type="button" onClick={() => setShowSmsPreview((current) => !current)} disabled={!smsAlertsEnabled} data-testid="button-preview-sms">
+              <Smartphone size={14} /> {showSmsPreview ? 'Close SMS preview' : 'Preview SMS alert'}
+            </button>
+          </div>
+          <div className="sms-preview-live" aria-live="polite" data-testid="status-sms-preview">
+            {showSmsPreview && smsAlertsEnabled ? (
+              <article className="email-preview sms-preview" data-testid="preview-synthetic-sms">
+                <div className="email-preview-head"><span>SYNTHETIC SMS PREVIEW</span><strong>NOT SENT</strong></div>
+                <dl>
+                  <div><dt>To</dt><dd>Not configured in this prototype</dd></div>
+                </dl>
+                <div className="email-preview-body">
+                  <p>FraudGuard demo: payment finding alert. Score 95 (threshold 60); new location + velocity signals. Review only—no payment action taken.</p>
+                </div>
+              </article>
+            ) : (
+              <span>{smsAlertsEnabled ? 'SMS preview is closed. Nothing has been sent.' : 'SMS alerts are disabled in this local demo; preview is unavailable.'}</span>
+            )}
+          </div>
+          <p className="alerts-prototype-note">This prototype cannot send email or SMS. Both previews are synthetic and marked NOT SENT.</p>
         </section>
 
         <section className="dashboard-path" data-testid="content-dashboard-integration-path">
