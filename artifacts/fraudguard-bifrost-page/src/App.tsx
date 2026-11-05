@@ -5,6 +5,7 @@ import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
+import ForCompanies from '@/pages/for-companies';
 import {
   Activity,
   ArrowDownRight,
@@ -71,11 +72,12 @@ function Home() {
           <span>FraudGuard <small>for Bifrost</small></span>
         </a>
         <nav className="nav-links" aria-label="Main navigation">
+          <Link href="/for-companies" className="results-nav-link" data-testid="link-home-companies">For companies</Link>
+          <Link href="/results" className="results-nav-link" data-testid="link-results">Demo results <ArrowRight size={13} /></Link>
           <a href="#verification" data-testid="link-verification">Test run</a>
           <a href="#repository" data-testid="link-repository">GitHub</a>
           <a href="#signals" data-testid="link-signals">Signals</a>
           <a href="#privacy" data-testid="link-privacy">Data boundaries</a>
-          <Link href="/results" className="results-nav-link" data-testid="link-results">Demo results <ArrowRight size={13} /></Link>
           <a className="nav-cta" href="https://github.com/sham-cyber/Plugin" target="_blank" rel="noreferrer" data-testid="link-demo">Open GitHub <ArrowDownRight size={14} /></a>
         </nav>
       </header>
@@ -372,6 +374,7 @@ function Results() {
         <nav className="nav-links results-nav" aria-label="Main navigation">
           <Link href="/" data-testid="link-results-back">Overview</Link>
           <Link href="/results" aria-current="page" data-testid="link-results-current">Demo results</Link>
+          <Link href="/for-companies" data-testid="link-results-companies">For companies</Link>
         </nav>
       </header>
 
@@ -524,6 +527,7 @@ function Router() {
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/results" component={Results} />
+        <Route path="/for-companies" component={ForCompanies} />
         <Route component={NotFound} />
       </Switch>
     </RoutedErrorBoundary>
