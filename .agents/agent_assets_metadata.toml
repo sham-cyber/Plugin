@@ -141,3 +141,17 @@ mtime_ms = 1793853439735
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/8526d4a3-fe3e-4ea7-9acc-f60a642f3dc4/728d22d9-c755-4d15-baef-3e51f213ca6a"
 storage_version_token = "1793853470901634"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "q4qW7qQYYyxQAaAPzJj7z"
+uri = "file://generated-artifacts/profit.pdf"
+type = "pdf"
+title = "FraudGuard — Global Plugin Business Profit Model"
+description = "A phone-readable 11-page global business scenario for serving Bifrost and other AI gateways. Includes launch costs, monetization, and low/base/upside five-year after-tax results with explicit assumptions and risks."
+logical_id = "4c962adb-505f-49da-a47f-5b0fa9007615"
+content_hash = "sha256:79f7061b61e70472f978f0219f8de225c7db874453f15b7d4f0585375b06deea"
+size = 146422
+mtime_ms = 1793854805408
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4c962adb-505f-49da-a47f-5b0fa9007615/cb88678c-5102-4e48-8672-0592e1084889"
+storage_version_token = "1793854877517540"
+content_type = "application/pdf"
