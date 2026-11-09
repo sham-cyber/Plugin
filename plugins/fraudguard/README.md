@@ -20,6 +20,15 @@ At that commit, an LLM plugin implements `schemas.LLMPlugin`:
 
 The standalone module pins `github.com/maximhq/bifrost/core v1.14.1`, the same core module version used by upstream sibling plugins at the inspected commit. The compile-time interface assertion and plugin hook test check the adapter contract when run against that core API.
 
+## Technologies Used
+
+- **Go:** version 1.27.3 for the plugin module.
+- **Bifrost:** `github.com/maximhq/bifrost/core` v1.14.1 and the `schemas.LLMPlugin` contract.
+- **Privacy/state:** Go standard-library HMAC/SHA-256 and synchronization primitives with bounded, in-memory profiles.
+- **Verification:** `go test`, `go test -race`, `go vet`, and a script that can test against the pinned Bifrost source checkout.
+
+The runtime does not call an external AI service, payment service, database, or alert provider. Go may access the module proxy to download dependencies during setup.
+
 ## Related research context
 
 FraudGuard adapts related behavioral anti-fraud ideas from Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1), titled “AI-money maker: intelligent automated revenue generation system with anti-fraud transaction detection by AI.” The application describes a broader system; this is an experimental Bifrost plugin applying related behavior-scoring ideas to AI-gateway requests. This reference does not claim the application was granted or that its claims cover FraudGuard; status and claim coverage have not been independently verified.
@@ -129,9 +138,27 @@ fraudguard.SetTrustedCredentialStatus(ctx, fraudguard.CredentialStatus{
 
 `Exposed` means another trusted system has already marked the key as exposed; FraudGuard does not search public sources or inspect secrets. These findings never authorize, reject, or alter a request or payment.
 
-## Integration
+## Installation & Setup
 
-This project is not a Bifrost source checkout, so the plugin lives as a sibling-style module in `plugins/fraudguard` and pins Bifrost's core API. To try it in a checkout of the upstream repository:
+### Run the prototype locally
+
+Use Go 1.27.3. Clone the public repository, then run:
+
+```sh
+git clone https://github.com/sham-cyber/Plugin.git
+cd Plugin
+cd plugins/fraudguard
+go test ./...
+go test -race ./...
+go vet ./...
+go run ./cmd/demo
+```
+
+The demo uses synthetic data and makes no service calls. These commands test and demonstrate the companion module; they do not install it into a running Bifrost server.
+
+### Manually integrate with a Bifrost checkout
+
+This project is not a Bifrost source checkout, so the plugin lives as a sibling-style module in `plugins/fraudguard` and pins Bifrost's core API. To integrate it manually in a checkout of the upstream repository:
 
 1. Copy this `plugins/fraudguard` directory into the matching directory in your Bifrost checkout at the pinned commit.
 2. Add the module to the app/server's Go workspace or module graph using the same approach as its other plugin modules.
@@ -227,7 +254,7 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 - Failed requests observed before a response contribute to the error signal only if Bifrost runs this plugin's post-hook for that request.
 - Cross-key correlation depends on Bifrost supplying a resolved authenticated user identity; it does not infer relationships between keys from headers or network addresses.
 - Periodic profile expiration is available via `Engine.Prune`; profile count is also bounded with oldest-profile eviction.
-- No dashboard, external AI service, database, network call, or auto-blocking behavior is included.
+- The Go plugin module has no dashboard, external AI service, database, alert provider, or auto-blocking behavior. A separate company-facing page in this project is a synthetic visual prototype only; it has no live tenant/subscription system, plugin feed, or email/SMS delivery.
 
 ## Related documents
 

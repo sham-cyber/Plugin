@@ -75,6 +75,6 @@ The test suite covers benign behavior, below-rate-limit anomalies, warmup, deter
 - No live-provider, production, multi-replica, or real-customer traffic test was run.
 - No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
 - No latency benchmark was run; no sub-30ms target is claimed.
-- No dashboard, Redis/shared store, automatic blocking, SaaS billing, pricing, or revenue model is implemented.
+- The Go plugin has no dashboard. A separate company-facing page is only a synthetic UI prototype, with no live plugin feed, tenant authentication, subscription/billing system, or email/SMS delivery. Redis/shared storage and automatic blocking are not implemented.
 - Findings are heuristic indicators, not proof of fraud. False positives are possible and thresholds require review against representative, permissioned traffic.
 - The project author supplied an image of Indian Patent Application No. 202521074434 (publication no. IN202521074434 A1). This report records the reference as author-provided only; it does not verify the application's legal status or whether its claims cover FraudGuard.

@@ -38,13 +38,19 @@ The tests cover benign baselines, anomalies below fixed rate limits, warmup, det
 
 ### Limits of verification
 
-No live-provider, production-traffic, multi-replica, or latency benchmark was run. No live payment or credential-status source, dashboard, shared store, automatic blocking, or built-in HTTP-server registration is implemented. Findings are heuristic indicators, not proof of fraud; false positives are possible. The patent-application reference below is author-provided: its legal status and whether its claims cover FraudGuard have not been independently verified.
+No live-provider, production-traffic, multi-replica, or latency benchmark was run. No live payment or credential-status source, live company dashboard, shared store, automatic blocking, or built-in HTTP-server registration is implemented. The separate company-facing page is synthetic only. Findings are heuristic indicators, not proof of fraud; false positives are possible. The patent-application reference below is author-provided: its legal status and whether its claims cover FraudGuard have not been independently verified.
 
 See the [full verification report](VERIFICATION_REPORT.md) for detailed inspection notes and verification limits.
 
-## Quick start
+## Installation & Setup
+
+### Run the local prototype
+
+The plugin module is in `plugins/fraudguard`. Use Go 1.27.3. Clone the public repository, then run:
 
 ```sh
+git clone https://github.com/sham-cyber/Plugin.git
+cd Plugin
 cd plugins/fraudguard
 go test ./...
 go test -race ./...
@@ -52,7 +58,32 @@ go vet ./...
 go run ./cmd/demo
 ```
 
-The demo uses synthetic requests, payment events, and trusted key-status flags only. It does not contact an LLM provider or payment service.
+The demo uses synthetic requests, payment events, and trusted key-status flags. It does not contact an LLM provider or payment service. Go may download module dependencies the first time you run these commands.
+
+### Connect it to a Bifrost checkout
+
+This is a companion module, not an installable built-in Bifrost feature. For a manual integration at the inspected Bifrost commit:
+
+1. Copy `plugins/fraudguard` into the matching plugin directory in that Bifrost checkout.
+2. Add the module to the app/server Go workspace or module graph.
+3. Create `fraudguard.New(...)` and pass it through `schemas.BifrostConfig.LLMPlugins` to `core.Init`.
+
+This direct `core.Init` path is not wired into Bifrost's built-in HTTP plugin loader. The full integration example and limitations are in the [technical README](plugins/fraudguard/README.md). No upstream Bifrost files were modified.
+
+## Implementation
+
+- A Go adapter implements Bifrost's `schemas.LLMPlugin` hooks. It reads the authenticated internal virtual-key ID supplied by Bifrost; it does not use IP headers as identity.
+- A bounded, process-local rolling profile compares model/provider use, request timing, token volume, and outcomes after warmup.
+- Explainable signals produce a deterministic 0–100 score and threshold alert. The plugin is observe-only: it does not block or alter requests.
+- Optional payment-velocity/location and expired/revoked/exposed-key signals accept trusted host inputs. Bifrost does not provide those sources automatically, and no live source is connected.
+- The company-facing page is a visual prototype using synthetic AshaRatna Tech data. Its subscription and email/SMS alert previews are simulated; it is not connected to plugin findings and sends no messages.
+
+## Technologies Used
+
+- **Plugin:** Go 1.27.3 and `github.com/maximhq/bifrost/core` v1.14.1, implementing `schemas.LLMPlugin`.
+- **Privacy and state:** Go standard library HMAC/SHA-256 and bounded in-memory state; no Redis or external AI service.
+- **Company-facing prototype page:** React, TypeScript, and Vite; it displays synthetic demo data only.
+- **Checks:** Go test, race detector, `go vet`, and the script for verifying against the pinned Bifrost source.
 
 ## Important scope
 
@@ -62,18 +93,25 @@ It uses bounded, in-memory state. It does not use Redis, retain prompts, infer i
 
 ## Future Scope (Not Implemented)
 
-> Proposed trusted integrations: payment velocity/location and key status (expired/revoked/exposed). The automatic Bifrost request path remains request-behavior only and observe-only.
->
-> Hardening TODO: 1) Wire real trusted payment/key sources 2) Deduplicate retried payments via idempotency ID
+The demo page is not a live company service: AshaRatna Tech is an illustrative label, the subscription state is simulated, and email/SMS alerts are previews only. Nothing is sent, no real company account or subscription is created, and the page is not connected to live plugin findings.
 
-The companion module includes opt-in evaluators for these signals, but no live payment-provider, location, or credential-status source is connected to Bifrost. A host must explicitly call `RecordPayment` for a transaction attempt or attach trusted credential status. These paths only report findings. Track the trusted-source integration proposal in [GitHub Issue #1](https://github.com/sham-cyber/Plugin/issues/1).
+For an actual deployment, the planned work is:
+
+1. **Bifrost installation:** wire the module into a supported built-in server/plugin loader and document a repeatable install and configuration path.
+2. **Company access:** implement authentication, tenant separation, team permissions, and a real findings dashboard. Keep each company's profiles and findings private.
+3. **Subscription and keys:** define subscription management and a secure product/API-key issuance model. This prototype neither issues product keys nor stores provider API keys; those must remain distinct concerns.
+4. **Email and SMS:** connect verified destinations and a delivery provider, with consent, retry, and audit behavior. Current alert cards are simulated previews, not delivery.
+5. **Trusted signals:** connect payment and key-status sources; deduplicate retried payment events with an idempotency ID. The plugin has optional input APIs, but no live sources.
+6. **Production readiness:** design shared state and retention for multiple replicas, then measure latency, load, false positives, and operational failure modes.
+
+The Bifrost request path remains observe-only unless a separately reviewed future design changes that scope. Track trusted-source integration and retry deduplication in [GitHub Issue #1](https://github.com/sham-cyber/Plugin/issues/1).
 
 ## Authorship and repository proof
 
 - **Project origin:** FraudGuard is a community hackathon prototype by [sham-cyber](https://github.com/sham-cyber), not an upstream Bifrost feature.
 - **Git history:** [Commit `224d4eb`](https://github.com/sham-cyber/Plugin/commit/224d4ebc165e0db95ad9c88e3cb70ea58edca818), authored by `sham-cyber`, records the opt-in payment and key-status signal implementation. It is a feature commit, not the initial project commit.
 - **License:** This repository's original code and documentation use Apache License 2.0, not MIT. Go source files carry matching copyright and SPDX notices. Bifrost and third-party components retain their own licenses.
-- **Public record:** The GitHub repository is public and uses `main` as its default branch (checked 2026-11-04). Git history is available there.
+- **Public record:** The GitHub repository is public and uses `main` as its default branch (checked 2026-11-09). Git history is available there.
 - **Open scope:** [Issue #1](https://github.com/sham-cyber/Plugin/issues/1) remains open for trusted-source integration and retry deduplication. No Bifrost upstream files were changed, and no upstream installation, acceptance, or merge is claimed.
 
 ## Origin
