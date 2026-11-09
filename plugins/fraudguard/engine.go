@@ -55,6 +55,15 @@ type Config struct {
 	EnableExposedKeySignal bool
 	// AlertThreshold is inclusive; findings below it remain observable but are not alerts.
 	AlertThreshold int
+	// AI review is opt-in. The host supplies an adapter backed by a separately
+	// configured Bifrost model client; the engine only sends sanitized findings.
+	EnableAIAnalysis    bool
+	AIAnalyzer          AIAnalyzer
+	OnAIReview          func(AIReviewEvent)
+	AIAnalysisMinScore  int
+	AIAnalysisTimeout   time.Duration
+	AIAnalysisWorkers   int
+	AIAnalysisQueueSize int
 	// ExemptVirtualKeyIDs contains resolved internal IDs, never credential values.
 	// IDs are immediately HMACed and are not stored in clear text.
 	ExemptVirtualKeyIDs []string
@@ -136,14 +145,18 @@ type Assessment struct {
 
 // Metrics is a privacy-preserving aggregate snapshot.
 type Metrics struct {
-	Profiles        int    `json:"profiles"`
-	Cohorts         int    `json:"cohorts"`
-	PaymentSubjects int    `json:"payment_subjects"`
-	Requests        uint64 `json:"requests"`
-	PaymentEvents   uint64 `json:"payment_events"`
-	Findings        uint64 `json:"findings"`
-	Alerts          uint64 `json:"alerts"`
-	ExemptRequests  uint64 `json:"exempt_requests"`
+	Profiles           int    `json:"profiles"`
+	Cohorts            int    `json:"cohorts"`
+	PaymentSubjects    int    `json:"payment_subjects"`
+	Requests           uint64 `json:"requests"`
+	PaymentEvents      uint64 `json:"payment_events"`
+	Findings           uint64 `json:"findings"`
+	Alerts             uint64 `json:"alerts"`
+	ExemptRequests     uint64 `json:"exempt_requests"`
+	AIReviewsQueued    uint64 `json:"ai_reviews_queued"`
+	AIReviewsDropped   uint64 `json:"ai_reviews_dropped"`
+	AIReviewsCompleted uint64 `json:"ai_reviews_completed"`
+	AIReviewsFailed    uint64 `json:"ai_reviews_failed"`
 }
 
 type event struct {
@@ -190,12 +203,22 @@ type Engine struct {
 	payments   map[string]*paymentProfile
 	nextID     uint64
 	metrics    Metrics
+	aiQueue    chan aiAnalysisJob
+	aiMu       sync.Mutex
+	aiClosed   bool
+	aiWG       sync.WaitGroup
 }
 
 // NewEngine creates an in-memory detector. A random process-local HMAC key ensures
 // profile map keys cannot be reversed or correlated across restarts.
 func NewEngine(config Config) (*Engine, error) {
 	config = withDefaults(config)
+	if config.EnableAIAnalysis && config.AIAnalyzer == nil {
+		return nil, errors.New("fraudguard: AI analysis enabled without a host model adapter")
+	}
+	if config.EnableAIAnalysis && config.OnAIReview == nil {
+		return nil, errors.New("fraudguard: AI analysis enabled without an AI review callback")
+	}
 	var secret [32]byte
 	if _, err := rand.Read(secret[:]); err != nil {
 		return nil, errors.New("fraudguard: unable to initialize private profile hashing")
@@ -215,6 +238,13 @@ func NewEngine(config Config) (*Engine, error) {
 	}
 	// Keep only digests; the caller-provided identifiers must not remain in config.
 	engine.cfg.ExemptVirtualKeyIDs = nil
+	if config.EnableAIAnalysis {
+		engine.aiQueue = make(chan aiAnalysisJob, config.AIAnalysisQueueSize)
+		for i := 0; i < config.AIAnalysisWorkers; i++ {
+			engine.aiWG.Add(1)
+			go engine.runAIWorker()
+		}
+	}
 	return engine, nil
 }
 
@@ -269,6 +299,27 @@ func withDefaults(config Config) Config {
 	}
 	if config.AlertThreshold > 100 {
 		config.AlertThreshold = 100
+	}
+	if config.AIAnalysisMinScore <= 0 {
+		config.AIAnalysisMinScore = config.AlertThreshold
+	}
+	if config.AIAnalysisMinScore > 100 {
+		config.AIAnalysisMinScore = 100
+	}
+	if config.AIAnalysisTimeout <= 0 {
+		config.AIAnalysisTimeout = 5 * time.Second
+	}
+	if config.AIAnalysisWorkers <= 0 {
+		config.AIAnalysisWorkers = 1
+	}
+	if config.AIAnalysisWorkers > 8 {
+		config.AIAnalysisWorkers = 8
+	}
+	if config.AIAnalysisQueueSize <= 0 {
+		config.AIAnalysisQueueSize = 64
+	}
+	if config.AIAnalysisQueueSize > 4096 {
+		config.AIAnalysisQueueSize = 4096
 	}
 	return config
 }
@@ -747,8 +798,9 @@ func (e *Engine) makeFindingLocked(now time.Time, signals []Signal, warmup bool)
 
 func (e *Engine) emit(sink func(Finding), finding Finding) {
 	if sink != nil && len(finding.Signals) > 0 {
-		sink(finding)
+		sink(cloneFinding(finding))
 	}
+	e.enqueueAIReview(finding)
 }
 
 func (e *Engine) emptyFinding(now time.Time, warmup bool) Finding {

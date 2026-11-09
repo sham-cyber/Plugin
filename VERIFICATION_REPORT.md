@@ -43,7 +43,9 @@ Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documen
 - Optional cross-key signal using a resolved authenticated user identity, disabled by default.
 - Thread-safe in-memory state, bounded profile and correlation storage, and process-local HMACs for internal identifiers.
 - Observe-only hooks: findings do not short-circuit, reject, or change a request.
-- No prompt/payload retention, Redis, external AI service, or network call in the detector.
+- Optional AI review, disabled by default, through a Bifrost-host-supplied adapter. It receives only a sanitized deterministic finding and returns a separate advisory; it cannot change the score or request flow.
+- AI review interprets existing named signals only; it is not a separate model-based detector and cannot discover patterns absent from the rule-based signals.
+- No prompt/payload retention, Redis, or provider-specific model client in the plugin. The host adapter owns any model call.
 
 ## 4. Checks run
 
@@ -57,11 +59,22 @@ The checks below were run from `plugins/fraudguard` on 2026-11-04 with Go 1.27.3
 | `GOSUMDB=sum.golang.org go vet ./...` | Passed; no diagnostics. |
 | `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; printed the synthetic request finding (`score=30`, `alert=false`, `signals=[rapid_sequence]`), payment finding (`score=95`, `alert=true`, `signals=[payment_new_location payment_velocity]`), and trusted key-status finding (`score=100`, `alert=true`, `signals=[key_expired key_exposed key_revoked]`). No network traffic. |
 
-The test suite covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, concurrency for requests and payment events, profile/cohort/payment-state bounds and expiry, privacy, exemptions, alert-threshold behavior, independent payment/key-status opt-ins, and observe-only plugin hooks. A test for alert-threshold clamping above 100 was added and run as part of the passing suite.
+Additional tests for the optional AI-review adapter were run on 2026-11-09 with Go 1.27.3:
+
+| Check | Result |
+| --- | --- |
+| `GOSUMDB=sum.golang.org go test ./...` | Passed. |
+| `GOSUMDB=sum.golang.org go test -race ./...` | Passed. |
+| `GOSUMDB=sum.golang.org go vet ./...` | Passed; no diagnostics. |
+| `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; standalone demo keeps AI review disabled and makes no network calls. |
+
+The full suite now also tests privacy-safe AI inputs, score/alert independence, bounded asynchronous queue behavior, timeout/error handling, and concurrent reviews. These tests use a local test adapter; no live host model call was made. The suite also covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, request/payment concurrency, profile/cohort/payment-state bounds and expiry, privacy, exemptions, alert-threshold behavior, independent payment/key-status opt-ins, and observe-only plugin hooks.
 
 ## 5. Privacy and scope checks
 
 - Findings contain structured scores and fixed signal reasons, not prompt text, raw virtual-key IDs, or raw cohort IDs.
+- The optional host-model adapter receives only score, threshold, alert/warmup flags, and fixed signals. It does not receive prompt/payload text, keys, payment IDs, provider/model labels, or credentials.
+- AI advisories are separate from deterministic findings; model output cannot change scores or request handling.
 - Profile and cohort map keys use process-local HMACs; the HMAC key is not persisted.
 - Payment subject IDs and coarse country values are HMACed before retention. Findings do not include payment subjects, country values, payment amounts, or credential values.
 - Cross-key correlation is opt-in and does not use IP or request headers.
@@ -72,6 +85,7 @@ The test suite covers benign behavior, below-rate-limit anomalies, warmup, deter
 
 - FraudGuard is **not** installed, accepted, or merged into upstream Bifrost.
 - The Bifrost HTTP server's built-in plugin registration/configuration path has not been wired or tested.
+- No live Bifrost-host model adapter was connected or tested; the adapter contract was tested with an in-process test implementation.
 - No live-provider, production, multi-replica, or real-customer traffic test was run.
 - No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
 - No latency benchmark was run; no sub-30ms target is claimed.

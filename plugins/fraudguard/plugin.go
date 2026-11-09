@@ -38,7 +38,7 @@ func New(config Config) (*Plugin, error) {
 
 func (p *Plugin) GetName() string { return PluginName }
 
-func (p *Plugin) Cleanup() error { return nil }
+func (p *Plugin) Cleanup() error { return p.engine.Close() }
 
 // PreRequestHook is required by schemas.LLMPlugin. FraudGuard does not route or mutate.
 func (p *Plugin) PreRequestHook(_ *schemas.BifrostContext, _ *schemas.BifrostRequest) error {
