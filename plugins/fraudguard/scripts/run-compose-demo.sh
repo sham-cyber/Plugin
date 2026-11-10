@@ -9,26 +9,52 @@ mkdir -p "$workspace_root/generated-artifacts"
 source_root="$(mktemp -d "$workspace_root/generated-artifacts/fraudguard-bifrost-src.XXXXXX")"
 project_name="fraudguard-demo-$$"
 mode="${1:-}"
+redis_host_port="${FRAUDGUARD_REDIS_HOST_PORT:-6379}"
+mock_provider_host_port="${FRAUDGUARD_MOCK_PROVIDER_HOST_PORT:-19090}"
+if [[ "$mode" == "--smoke" ]]; then
+  bifrost_host_port="${FRAUDGUARD_BIFROST_HOST_PORT-}"
+else
+  bifrost_host_port="${FRAUDGUARD_BIFROST_HOST_PORT:-8080}"
+fi
 if [[ -n "$mode" && "$mode" != "--smoke" ]]; then
   echo "Usage: $0 [--smoke]" >&2
   exit 2
 fi
 
+valid_port() {
+  [[ "$1" =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 ))
+}
+
 compose_args=(-f "$compose_file")
 compose_override=""
 if [[ "$mode" == "--smoke" ]]; then
+  if ! valid_port "$redis_host_port" || ! valid_port "$mock_provider_host_port"; then
+    echo "Readiness host ports must be integers between 1 and 65535." >&2
+    exit 2
+  fi
+  if [[ -n "$bifrost_host_port" ]] && ! valid_port "$bifrost_host_port"; then
+    echo "FRAUDGUARD_BIFROST_HOST_PORT must be empty for an auto-assigned port or an integer between 1 and 65535." >&2
+    exit 2
+  fi
+  export FRAUDGUARD_BIFROST_HOST_PORT="$bifrost_host_port"
   # Some managed Docker runners cannot execute in-container health checks.
-  # The smoke path uses host-side HTTP readiness checks instead.
+  # The smoke path publishes loopback-only ports and checks services from host.
   compose_override="$workspace_root/generated-artifacts/fraudguard-compose-smoke-$$.yml"
-  cat > "$compose_override" <<'EOF'
+  cat > "$compose_override" <<EOF
 services:
   redis:
+    ports:
+      - "127.0.0.1:${redis_host_port}:6379"
     healthcheck:
       disable: true
   mock-provider:
+    ports:
+      - "127.0.0.1:${mock_provider_host_port}:9090"
     healthcheck:
       disable: true
   bifrost:
+    build:
+      network: host
     depends_on:
       redis:
         condition: service_started
@@ -66,6 +92,7 @@ fi
 # changes the user's checkout or the public upstream repository.
 BIFROST_ROOT="$source_root" bash "$module_dir/integration/apply-bifrost-integration.sh" --apply
 export BIFROST_ROOT="$source_root"
+BIFROST_ROOT="$source_root" docker compose -p "$project_name" "${compose_args[@]}" config >/dev/null
 
 echo "Running the pinned Bifrost HTTP server plugin-loader test."
 (
@@ -82,11 +109,48 @@ if [[ "$mode" != "--smoke" ]]; then
 fi
 
 command -v curl >/dev/null || { echo "curl is required for --smoke" >&2; exit 1; }
+command -v timeout >/dev/null || { echo "timeout is required for the Redis TCP readiness check" >&2; exit 1; }
 docker compose -p "$project_name" "${compose_args[@]}" up --build --detach
+
+if [[ -z "$bifrost_host_port" ]]; then
+  port_mapping="$(BIFROST_ROOT="$source_root" docker compose -p "$project_name" "${compose_args[@]}" port bifrost 8080)"
+  bifrost_host_port="${port_mapping##*:}"
+fi
+echo "Bifrost smoke endpoint: http://127.0.0.1:${bifrost_host_port}."
+
+redis_ready=0
+for _ in $(seq 1 30); do
+  if timeout 2 bash -c "exec 3<>/dev/tcp/127.0.0.1/${redis_host_port}" 2>/dev/null; then
+    redis_ready=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$redis_ready" -ne 1 ]]; then
+  echo "Redis did not accept a TCP connection on 127.0.0.1:${redis_host_port} within 30 seconds." >&2
+  docker compose -p "$project_name" "${compose_args[@]}" logs --tail=80 redis
+  exit 1
+fi
+echo "Redis is ready via TCP on 127.0.0.1:${redis_host_port}."
+
+mock_provider_ready=0
+for _ in $(seq 1 30); do
+  if curl --silent --fail "http://127.0.0.1:${mock_provider_host_port}/healthz" >/dev/null; then
+    mock_provider_ready=1
+    break
+  fi
+  sleep 1
+done
+if [[ "$mock_provider_ready" -ne 1 ]]; then
+  echo "Mock provider did not become healthy at http://127.0.0.1:${mock_provider_host_port}/healthz within 30 seconds." >&2
+  docker compose -p "$project_name" "${compose_args[@]}" logs --tail=80 mock-provider
+  exit 1
+fi
+echo "Mock provider is ready via HTTP at http://127.0.0.1:${mock_provider_host_port}/healthz."
 
 ready=0
 for _ in $(seq 1 90); do
-  if curl --silent --fail http://127.0.0.1:8080/health >/dev/null; then
+  if curl --silent --fail "http://127.0.0.1:${bifrost_host_port}/health" >/dev/null; then
     ready=1
     break
   fi
@@ -107,7 +171,7 @@ for case_name in baseline context-anomaly; do
     request_body="$context_request"
   fi
   status="$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
-    http://127.0.0.1:8080/v1/chat/completions \
+    "http://127.0.0.1:${bifrost_host_port}/v1/chat/completions" \
     -H 'Content-Type: application/json' \
     -H 'x-bf-vk: sk-bf-fraudguard-local-demo' \
     --data "$request_body")"

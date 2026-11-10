@@ -402,6 +402,10 @@ bash plugins/fraudguard/scripts/run-compose-demo.sh
 
 The script fetches Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` into an isolated temporary directory under the ignored `generated-artifacts/` folder, applies the local overlay only to that disposable checkout, builds a Bifrost image, and starts it with Redis and the local synthetic OpenAI-compatible mock provider. It does not edit a separate Bifrost checkout or push anything upstream. The synthetic virtual key is `sk-bf-fraudguard-local-demo`; the provider returns a fixed local response and never echoes or logs prompts. Use `Ctrl+C` to stop the demo; its temporary checkout and Compose containers are removed.
 
+Run `bash plugins/fraudguard/scripts/run-compose-demo.sh --smoke` for host-side readiness checks. Redis is checked by opening a raw TCP connection to `127.0.0.1:6379` (or the configured Redis host port), not with HTTP. The mock provider uses `GET /healthz`, and Bifrost uses `GET /health`. Smoke mode publishes ports on loopback, chooses an available Bifrost host port by default, and disables only the temporary Compose health checks; the script prints the assigned Bifrost URL.
+
+The local demo config sets Bifrost's `network_config.allow_private_network` only so it can reach the synthetic provider on the private Compose network. Do not copy this setting into a production config unless the operator has explicitly approved that private destination. Bifrost continues to block link-local destinations.
+
 Send a synthetic request in a second terminal:
 
 ```sh

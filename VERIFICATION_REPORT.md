@@ -95,7 +95,7 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 | `GOSUMDB=sum.golang.org go vet ./...` | Passed; no diagnostics. |
 | `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; synthetic observe-only request/payment/key-status findings printed, with no network calls. |
 | Integration overlay application | Passed on a temporary local clone at the pinned Bifrost commit; the script added the module, server loader registration, configuration entry, and pass-through test. It did not push or modify the public upstream repository. |
-| `go test -p 1 ./bifrost-http/server` | Passed once on the pinned local overlay clone before the final internal module hardening. A refreshed-source rerun was stopped during linking after running without a result; no pass is claimed for that rerun. |
+| `go test -p 1 ./bifrost-http/server` | Passed on a fresh temporary checkout of the pinned Bifrost commit after applying the local overlay (2026-11-10). The checkout was disposable and was not pushed upstream. |
 
 ## 5. Privacy and scope checks
 
@@ -109,15 +109,15 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - Audit records are HMAC-signed and Redis-retained; this is tamper-evident, not immutable against Redis administrators. Webhook payloads contain only sanitized audit records.
 - Payment subject IDs and coarse country values are HMACed before retention. Findings do not include payment subjects, country values, payment amounts, or credential values.
 - Cross-key correlation is opt-in and does not use IP or request headers.
-- The demo is synthetic and makes no provider or network calls.
+- The standalone CLI demo is synthetic and makes no network calls. The Compose demo uses only local Redis and a local mock provider; it makes no external AI-provider calls.
 - A temporary checkout was locally modified by the integration overlay for verification. No commit, pull request, or push to upstream was made.
 
 ## 6. Not verified / not claimed
 
 - FraudGuard is **not** installed, accepted, or merged into upstream Bifrost.
-- The built-in loader overlay is present and applied to a temporary local checkout. The server-package test passed before the final internal module hardening; a refreshed-source rerun did not produce a result and was stopped during linking. No final refreshed-source server build or upstream installation, acceptance, or merge is claimed.
+- The built-in loader overlay is present and applied to a temporary local checkout. The pinned server-package test passed after applying the overlay. The plugin is not installed, accepted, or merged upstream.
 - No live Bifrost-host model adapter was connected or tested; the adapter contract was tested with an in-process test implementation.
-- No live Redis, webhook endpoint, Stripe/billing engine, production, multi-replica, or real-customer traffic test was run. Redis and webhooks were tested only with local fixtures.
+- No production Redis, webhook endpoint, Stripe/billing engine, multi-replica, or real-customer traffic test was run. Redis and webhooks were tested only with local containers or fixtures.
 - No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
 - No latency benchmark was run; no sub-30ms target is claimed.
 - Behavioral profiles remain in-memory and process-local; only product usage and audit data can be shared through Redis. No live tenant-facing dashboard, tenant authentication, subscription service, or email/SMS delivery is connected.
@@ -133,7 +133,7 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - `config.example.json` is covered by a validation test. Tests also cover unknown `blocklist` field rejection, exemptions, invalid/oversized files, watcher recovery, and concurrent reloads with requests.
 - `main_test.go` initializes the real Bifrost core client with FraudGuard attached and sends a chat request through its plugin pipeline to a local OpenAI-compatible HTTP mock. The alerting prompt anomaly reaches the mock provider unchanged; the finding contains no prompt. This is not a test of Bifrost's inbound HTTP gateway.
 - After these changes, `go test -count=1 ./...`, `go test -count=1 -race ./...`, `go vet ./...`, and `go run ./cmd/demo` passed in `plugins/fraudguard`.
-- No request throttle, blocklist, or automatic blocking was added. Payment-velocity settings create alerts only. The pinned Bifrost server loader's refreshed-source rebuild remains unverified as described in section 6.
+- No request throttle, blocklist, or automatic blocking was added. Payment-velocity settings create alerts only. The pinned Bifrost server-loader package test passed; inbound HTTP smoke results are recorded in section 20.
 
 ## 8. Observability, Redis fail-safe, diagnostics, and packaging (2026-11-10)
 
@@ -249,3 +249,12 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - `make fraudguard-sanity` passed. `bash scripts/deploy.sh preflight` passed module build, the full Go suite, race tests, vet, and synthetic demo. `bash -n scripts/deploy.sh`, `gofmt -d`, `git diff --check`, and a temporary source-archive content/exclusion check passed.
 - Added `PRESENTATION.md`, `RELEASE.md`, and a release helper with local preflight, packaging, optional Compose demo, and opt-in local tag creation. The `deploy` command intentionally refuses because no production target is configured; no Docker image build, production deploy, or tag was performed.
 - The GitHub Actions workflow remains pending and is excluded from the requested push. CI was not run. No live Redis or production Bifrost deployment was tested.
+
+## 20. Host-side readiness and Bifrost HTTP smoke (2026-11-10)
+
+- `plugins/fraudguard/scripts/run-compose-demo.sh --smoke` now checks Redis with a raw TCP connection to the configured host port (6379 by default), the mock provider with HTTP `GET /healthz`, and Bifrost with HTTP `GET /health`. Redis is not treated as an HTTP service. The smoke-only Compose override binds published ports to loopback, uses an automatically assigned Bifrost host port by default, and disables in-container health checks for managed runners that reject Docker healthcheck execs.
+- A fresh temporary checkout of Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` passed `go test -p 1 ./bifrost-http/server` with the local FraudGuard loader overlay.
+- A local Compose runtime using the previously built image for that pinned Bifrost overlay passed the raw Redis TCP check, mock-provider HTTP readiness check, and Bifrost HTTP health check. Synthetic baseline and context-anomaly chat requests both returned HTTP 200, confirming observe-only pass-through. A FraudGuard finding appeared in Bifrost logs without the prompt text or virtual-key value.
+- The local demo provider config explicitly enables `network_config.allow_private_network` only to reach the synthetic provider on the private Compose network. This is not a production default; operators must not copy it into production unless they explicitly approve the destination. Bifrost continues to block link-local destinations.
+- A fresh full `run-compose-demo.sh --smoke` rebuild was attempted; the pinned server test passed, but the shell time limit stopped the run during Docker image build. Therefore, this report does not claim that this fresh rebuild completed. The successful HTTP smoke used the previously built pinned image and current mounted demo config.
+- These checks validate only a local synthetic integration. They do not establish upstream acceptance, production readiness, real-provider connectivity, multi-replica behavior, or production latency.

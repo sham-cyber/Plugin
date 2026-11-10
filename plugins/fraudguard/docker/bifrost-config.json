@@ -8,6 +8,7 @@
     "vllm-local": {
       "keys": [
         {
+          "id": "fraudguard-demo-key",
           "name": "fraudguard-demo-key",
           "value": "local-demo-only",
           "models": ["*"],
@@ -16,6 +17,7 @@
       ],
       "network_config": {
         "base_url": "http://mock-provider:9090",
+        "allow_private_network": true,
         "default_request_timeout_in_seconds": 10
       },
       "custom_provider_config": {
@@ -52,8 +54,6 @@
       "config": {
         "alert_threshold": 60,
         "warmup_requests": 1,
-        "window": "15m",
-        "profile_ttl": "2h",
         "max_profiles": 10000,
         "enable_prompt_override_signals": true,
         "enable_context_guard": true,

@@ -28,7 +28,7 @@ services:
       args:
         VERSION: fraudguard-local
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${FRAUDGUARD_BIFROST_HOST_PORT-8080}:8080"
     environment:
       APP_PORT: "8080"
       APP_HOST: "0.0.0.0"
