@@ -23,6 +23,8 @@ The standalone module pins `github.com/maximhq/bifrost/core v1.14.1`, the same c
 ## Technologies Used
 For deployment prerequisites, health monitoring, Redis boundaries, troubleshooting, and rollout/rollback guidance, see the repository [operations runbook](../../RUNBOOK.md).
 
+For the proposed pricing structure and the limits of the current billing export, see the repository [monetization architecture](../../MONETIZATION.md).
+
 
 - **Go:** version 1.27.3 for the plugin module.
 - **Bifrost:** `github.com/maximhq/bifrost/core` v1.14.1 and the `schemas.LLMPlugin` contract.
@@ -297,7 +299,9 @@ The custom prompt-rule set is compiled once and atomically replaced; it does not
 
 Optional webhook settings are `FRAUDGUARD_WEBHOOK_URL`, `FRAUDGUARD_WEBHOOK_SIGNING_KEY` (at least 32 bytes), and `FRAUDGUARD_WEBHOOK_ALLOWED_HOSTS` (comma-separated exact hostnames). All three are required together. The endpoint must be HTTPS and allowlisted; redirects and private-network destinations are rejected by default. The environment webhook is scoped to the configured deployment tenant. Multi-tenant delivery requires a host-supplied `WebhookTargetResolver`.
 
-The usage ledger deduplicates repeated writes with the same event ID. The Bifrost hook creates a fresh event ID per invocation, so gateway retry attempts are not deduplicated by this module. The usage export helper emits versioned JSON with aggregate request/token/fraud-check counts and an optional plan evaluation. It intentionally contains no price or `blocked_requests` field because FraudGuard never blocks. Export does not create invoices, charge cards, or call Stripe; the host must authorize access and connect its billing engine.
+The usage ledger deduplicates repeated writes with the same event ID. The Bifrost hook creates a fresh event ID per invocation, so gateway retry attempts are not deduplicated by this module. The usage export helper emits versioned JSON with aggregate request/token/fraud-check counts and an optional plan evaluation. It intentionally contains no price or `blocked_requests` field because FraudGuard never blocks. Export does not create invoices, charge cards, or call Stripe.
+
+`NewBillingExportHandler` serves `GET /admin/fraudguard/usage-export?month=YYYY-MM` when the host mounts it. The host must provide an authorization callback and a tenant resolver backed by authenticated server-side context; caller-supplied tenant query parameters are rejected and tenant headers are not read by FraudGuard. The handler returns no-store JSON and applies plan export entitlements when configured. The host must mount it on a private listener and connect any billing service separately.
 
 Payment velocity counts each trusted `RecordPayment` call. Deduplicating retried payment events remains the responsibility of the host's idempotency layer and is not implemented in this module.
 

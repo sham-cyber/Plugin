@@ -225,3 +225,11 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - `BuildUsageExport` / `ExportUsageJSON` provide a versioned, amount-free monthly payload with an HMAC tenant reference, request/token/fraud-check/finding/alert totals, and optional plan evaluation. It is not an invoice, payment request, or automatic billing sync. No blocked-attempt field is emitted because FraudGuard never blocks.
 - Free/Pro/Enterprise plans come from the trusted host resolver and plan catalog, not request headers. Usage warnings/overages are informational; tier entitlements can enable signals and exports, but no tier throttles requests or blocks high-risk prompts.
 - Focused usage-export privacy and observe-only tier-policy tests passed. No new behavior or production billing integration was introduced.
+
+## 17. Billing usage export and monetization guide (2026-11-10)
+
+- Added a host-mountable `GET /admin/fraudguard/usage-export?month=YYYY-MM` handler. It requires explicit authorization and a server-side tenant resolver, rejects tenant selectors in query parameters, returns no-store amount-free usage JSON, and does not push data to an external billing provider.
+- Usage-export plan entitlement is checked before reading the ledger. Unauthorized callers, untrusted tenant resolution, non-entitled plans, malformed periods, and storage failures receive stable generic responses without raw tenant IDs or internal error details.
+- Added tests for trusted tenant attribution, auth, tenant-override rejection, entitlement checks, amount/privacy fields, and advisory-only overages. The existing ledger and tier tests continue to cover measured usage and non-blocking tier behavior.
+- Added `MONETIZATION.md` with proposed Free/Pro/Enterprise roles, pricing-unit options, revenue formulas, and explicit assumptions. It does not claim money saved by blocking, guaranteed revenue, configured prices, or a Bifrost commercial agreement.
+- No provider credentials or Stripe connection were added. The CI workflow remains pending and was not modified.

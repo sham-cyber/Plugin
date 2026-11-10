@@ -14,6 +14,8 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 
 [Open the operations runbook](RUNBOOK.md)
 
+[Read the monetization architecture](MONETIZATION.md)
+
 ## Verification Report — What Was Checked and What It Proves
 
 This section is the project's evidence summary. It distinguishes what was checked from what remains unverified.

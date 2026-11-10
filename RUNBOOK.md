@@ -75,7 +75,7 @@ There is no IP blocklist, Redis Lua rate limiter, or distributed behavioral hist
 
 ## Monitoring and alert response
 
-Mount health and admin handlers only on a private listener and provide host-owned authorization. Relevant routes include `/healthz`, `/readyz`, `/admin/fraudguard/status`, `/admin/fraudguard/dashboard`, and `/admin/fraudguard/metrics`.
+Mount health and admin handlers only on a private listener and provide host-owned authorization. Relevant routes include `/healthz`, `/readyz`, `/admin/fraudguard/status`, `/admin/fraudguard/dashboard`, and `/admin/fraudguard/metrics`. If the host mounts `NewBillingExportHandler`, protect `/admin/fraudguard/usage-export` with billing-service authorization and a trusted tenant resolver.
 
 Recommended initial operator alerts:
 
