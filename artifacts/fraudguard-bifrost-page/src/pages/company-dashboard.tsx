@@ -14,6 +14,23 @@ import {
 import { useState } from 'react';
 import { Link } from 'wouter';
 
+const syntheticRiskUsage = {
+  flaggedRequests: 4,
+  promptTokens: 240_000,
+  completionTokens: 80_000,
+  promptRatePerMillion: 2,
+  completionRatePerMillion: 8,
+};
+
+const modeledPromptCost =
+  syntheticRiskUsage.promptTokens / 1_000_000 * syntheticRiskUsage.promptRatePerMillion;
+const modeledCompletionCost =
+  syntheticRiskUsage.completionTokens / 1_000_000 * syntheticRiskUsage.completionRatePerMillion;
+const modeledPotentiallyAvoidableSpend = modeledPromptCost + modeledCompletionCost;
+const formatDemoCurrency = (value: number) =>
+  new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+const formatDemoTokens = (value: number) => new Intl.NumberFormat('en-US').format(value);
+
 export default function CompanyDashboard() {
   const [findingType, setFindingType] = useState<'all' | 'behavior' | 'payment'>('all');
   const [alertOnly, setAlertOnly] = useState(false);
@@ -74,6 +91,52 @@ export default function CompanyDashboard() {
             <span>FREE DEMO</span>
             <strong>No billing · no Bifrost deal</strong>
           </div>
+        </section>
+
+        <section className="dashboard-spend-model" aria-label="Synthetic potentially avoidable spend estimate" data-testid="card-potentially-avoidable-spend">
+          <div className="spend-model-main">
+            <span className="spend-model-kicker">SYNTHETIC COST MODEL · NOT REALIZED SAVINGS</span>
+            <h2>Potentially avoidable spend</h2>
+            <strong className="spend-model-value" data-testid="value-potentially-avoidable">
+              {formatDemoCurrency(modeledPotentiallyAvoidableSpend)}
+            </strong>
+            <p>Estimated provider cost associated with {syntheticRiskUsage.flaggedRequests} synthetic flagged requests.</p>
+            <span className="spend-model-tag">COUNTERFACTUAL PROXY</span>
+          </div>
+
+          <div className="spend-model-detail">
+            <div className="spend-model-stats">
+              <div className="spend-model-stat">
+                <span>Flagged requests</span>
+                <strong>{syntheticRiskUsage.flaggedRequests}</strong>
+              </div>
+              <div className="spend-model-stat">
+                <span>Input tokens</span>
+                <strong>{formatDemoTokens(syntheticRiskUsage.promptTokens)}</strong>
+              </div>
+              <div className="spend-model-stat">
+                <span>Output tokens</span>
+                <strong>{formatDemoTokens(syntheticRiskUsage.completionTokens)}</strong>
+              </div>
+              <div className="spend-model-stat">
+                <span>Demo rate-card total</span>
+                <strong>{formatDemoCurrency(modeledPotentiallyAvoidableSpend)}</strong>
+              </div>
+            </div>
+            <div className="spend-model-math" aria-label="Illustrative token cost calculation">
+              <span>Input: {formatDemoTokens(syntheticRiskUsage.promptTokens)} × ${syntheticRiskUsage.promptRatePerMillion}/1M = {formatDemoCurrency(modeledPromptCost)}</span>
+              <span>Output: {formatDemoTokens(syntheticRiskUsage.completionTokens)} × ${syntheticRiskUsage.completionRatePerMillion}/1M = {formatDemoCurrency(modeledCompletionCost)}</span>
+            </div>
+          </div>
+
+          <aside className="spend-model-disclaimer" role="note">
+            <CircleHelp size={16} />
+            <div>
+              <strong>Demo assumptions only</strong>
+              <p>The sample rate card ($2 input / $8 output per million tokens) and token totals are synthetic, not provider prices. The estimate assumes an operator might later reject all flagged requests; none were blocked, so this is not realized savings.</p>
+              <p>No FraudGuard fee is configured, so net ROI is not shown. The Bifrost–AshaRatna API connection is not built; this card uses local demo data only.</p>
+            </div>
+          </aside>
         </section>
 
         <section className="dashboard-toolbar" aria-label="Preview status">
