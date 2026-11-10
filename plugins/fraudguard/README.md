@@ -4,6 +4,21 @@ FraudGuard is an observe-only Go plugin module for the Bifrost AI gateway. It sc
 
 This code is a companion module in this Replit project. A local integration overlay and installer are included for the pinned Bifrost commit, but they do not change the upstream repository by themselves. FraudGuard is **not** included in upstream Bifrost, and no upstream acceptance or merge is claimed.
 
+## Hackathon Evaluation Guide
+
+**Quick local review:** typically under two minutes after Go modules are available. Use Go 1.27.3 and `make`. The first run may take longer while Go downloads dependencies. These commands need no Redis server, Docker, provider/API keys, payment service, or hosted CI:
+
+```sh
+make fraudguard-verify
+make fraudguard-fuzz-smoke
+```
+
+`fraudguard-verify` builds the module, runs unit tests, the race detector and `go vet`, then prints synthetic observe-only examples. `fraudguard-fuzz-smoke` runs two bounded fuzz checks for three seconds each by default; use `make fraudguard-fuzz-smoke FUZZTIME=15s` for a longer local pass.
+
+The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For a quick code review, start with [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md), then inspect [`plugin.go`](plugin.go), [`engine.go`](engine.go), and the tests in this directory. For the pinned Bifrost loader test, follow [Manual integration](#manually-integrate-with-a-bifrost-checkout); it requires a separate checkout at the exact pinned commit.
+
+GitHub Actions are not needed for this evaluation and have not been run. The workflow is configured for pull requests or manual dispatch; pushing to `main` does not start it.
+
 ## Upstream contract and compatibility
 
 The hook shape was inspected at upstream commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
