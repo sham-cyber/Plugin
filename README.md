@@ -2,6 +2,8 @@
 
 This project contains a production-oriented, observe-only Go plugin module for the Bifrost AI gateway, plus a synthetic hackathon demo. It looks for request-behavior changes that fixed request-count limits can miss, with separate opt-in signals for trusted payment events, credential status, bounded prompt checks, and transient multi-turn context heuristics. It reports findings; it never blocks requests or payments. A local integration overlay and Compose smoke-demo path are provided, but this is not an upstream feature or a production deployment; shared multi-replica behavior, trusted external sources, and production workload verification remain outstanding.
 
+**AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
+
 ## Project documents
 
 The technical README includes setup, demo, tests, Bifrost integration, privacy limits, and limitations. The judge-facing scope and runbook are in [SUBMISSION.md](SUBMISSION.md):
@@ -15,6 +17,7 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 [Open the operations runbook](RUNBOOK.md)
 
 [Read the monetization architecture](MONETIZATION.md)
+[Read the hackathon pitch](PITCH.md)
 
 ## Verification Report — What Was Checked and What It Proves
 
@@ -122,7 +125,7 @@ This changes only the chosen local checkout; it does not commit or push to upstr
 - Optional threat indicators accept only trusted resolved internal key IDs, store HMAC digests with bounded TTL, and add a signal without blocking. An optional budget monitor reports threshold warnings from trusted host usage and pricing; it does not enforce caps or invent prices.
 - HMAC-SHA256 webhook signature verification is available for receivers; it authenticates the body but does not prevent replay.
 - Optional AI review is disabled by default. A Bifrost host may supply an isolated model adapter; it receives only the deterministic score and fixed signal summary, runs through a bounded background queue, and cannot change the score or alert. It interprets existing signals; it does not discover patterns outside the rule-based detector.
-- The company-facing page is a visual prototype using synthetic AshaRatna Tech data. Its subscription and email/SMS alert previews are simulated; it is not connected to plugin findings and sends no messages.
+- The company-facing page is synthetic by default. Its subscription and email/SMS previews are simulated and it is not connected to live findings. A configured same-origin AshaRatna cost endpoint can replace only the cost panel after its authenticated response is validated; that endpoint and company login are not mounted here.
 
 ## Technologies Used
 
@@ -142,7 +145,7 @@ Behavioral profiles use bounded, in-memory state. Optional Redis services store 
 
 ## Future Scope (Not Implemented)
 
-The demo page is not a live company service: AshaRatna Tech is an illustrative label, the subscription state is simulated, and email/SMS alerts are previews only. The free hackathon tier and AshaRatna/Bifrost revenue routes are proposals in the documentation, not active commercial services. Nothing is sent, no real company account or subscription is created, and the page is not connected to live plugin findings.
+The demo page is not a live company service: AshaRatna Tech is an illustrative label, the subscription state is simulated, and email/SMS alerts are previews only. The free hackathon tier and AshaRatna/Bifrost revenue routes are proposals in the documentation, not active commercial services. The cost panel defaults to synthetic data; a configured authenticated AshaRatna source is required before it can show live cost data. Nothing is sent, no real company account or subscription is created, and findings remain synthetic.
 
 For an actual deployment, the planned work is:
 

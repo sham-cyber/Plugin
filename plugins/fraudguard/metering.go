@@ -10,6 +10,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -28,6 +29,8 @@ var (
 type UsageEvent struct {
 	EventID           string
 	TenantID          string
+	Provider          string
+	Model             string
 	OccurredAt        time.Time
 	PromptTokens      int64
 	CompletionTokens  int64
@@ -36,19 +39,33 @@ type UsageEvent struct {
 	AlertCount        int64
 }
 
-// UsageTotals is a tenant-month aggregate. TenantRef is an HMAC digest, not the
-// original tenant identifier.
-type UsageTotals struct {
-	TenantRef        string `json:"tenant_ref"`
-	Month            string `json:"month"`
+// ModelUsage is an authorized tenant's aggregated provider/model token volume.
+// The export carries no prices and never contains request-level prompt content.
+type ModelUsage struct {
+	Provider         string `json:"provider"`
+	Model            string `json:"model"`
 	Requests         int64  `json:"requests"`
 	PromptTokens     int64  `json:"prompt_tokens"`
 	CompletionTokens int64  `json:"completion_tokens"`
-	FraudChecks      int64  `json:"fraud_checks"`
-	FraudCheckMicros int64  `json:"fraud_check_latency_micros"`
-	Findings         int64  `json:"findings"`
-	Alerts           int64  `json:"alerts"`
 }
+
+// UsageTotals is a tenant-month aggregate. TenantRef is an HMAC digest, not the
+// original tenant identifier.
+type UsageTotals struct {
+	TenantRef              string       `json:"tenant_ref"`
+	Month                  string       `json:"month"`
+	Requests               int64        `json:"requests"`
+	PromptTokens           int64        `json:"prompt_tokens"`
+	CompletionTokens       int64        `json:"completion_tokens"`
+	FraudChecks            int64        `json:"fraud_checks"`
+	FraudCheckMicros       int64        `json:"fraud_check_latency_micros"`
+	Findings               int64        `json:"findings"`
+	Alerts                 int64        `json:"alerts"`
+	ModelBreakdownComplete bool         `json:"model_breakdown_complete"`
+	Models                 []ModelUsage `json:"models,omitempty"`
+}
+
+const maxUsageModelsPerTenantMonth = 64
 
 // UsageLedger records idempotent request usage and returns monthly aggregates.
 type UsageLedger interface {
@@ -196,6 +213,10 @@ var recordUsageScript = redis.NewScript(`
 if redis.call("EXISTS", KEYS[2]) == 1 then
   return 0
 end
+local priorRequests = tonumber(redis.call("HGET", KEYS[1], "requests") or "0")
+if redis.call("HEXISTS", KEYS[1], "model_breakdown_incomplete") == 0 then
+  redis.call("HSET", KEYS[1], "model_breakdown_incomplete", priorRequests)
+end
 redis.call("HINCRBY", KEYS[1], "requests", 1)
 redis.call("HINCRBY", KEYS[1], "prompt_tokens", ARGV[1])
 redis.call("HINCRBY", KEYS[1], "completion_tokens", ARGV[2])
@@ -204,6 +225,29 @@ redis.call("HINCRBY", KEYS[1], "fraud_check_latency_micros", ARGV[3])
 redis.call("HINCRBY", KEYS[1], "findings", ARGV[4])
 redis.call("HINCRBY", KEYS[1], "alerts", ARGV[5])
 redis.call("HSET", KEYS[1], "month", ARGV[6])
+local modelRef = ARGV[8]
+if modelRef == "" then
+  redis.call("HINCRBY", KEYS[1], "model_breakdown_incomplete", 1)
+else
+  local modelPrefix = "model:" .. modelRef .. ":"
+  if redis.call("HEXISTS", KEYS[1], modelPrefix .. "requests") == 1 then
+    redis.call("HINCRBY", KEYS[1], modelPrefix .. "requests", 1)
+    redis.call("HINCRBY", KEYS[1], modelPrefix .. "prompt_tokens", ARGV[1])
+    redis.call("HINCRBY", KEYS[1], modelPrefix .. "completion_tokens", ARGV[2])
+  else
+    local modelCount = tonumber(redis.call("HGET", KEYS[1], "model_count") or "0")
+    if modelCount < tonumber(ARGV[9]) then
+      redis.call("HINCRBY", KEYS[1], "model_count", 1)
+      redis.call("HSET", KEYS[1], modelPrefix .. "provider", ARGV[10])
+      redis.call("HSET", KEYS[1], modelPrefix .. "model", ARGV[11])
+      redis.call("HSET", KEYS[1], modelPrefix .. "requests", 1)
+      redis.call("HSET", KEYS[1], modelPrefix .. "prompt_tokens", ARGV[1])
+      redis.call("HSET", KEYS[1], modelPrefix .. "completion_tokens", ARGV[2])
+    else
+      redis.call("HINCRBY", KEYS[1], "model_breakdown_incomplete", 1)
+    end
+  end
+end
 redis.call("EXPIRE", KEYS[1], ARGV[7])
 redis.call("SET", KEYS[2], "1", "EX", ARGV[7])
 return 1
@@ -220,6 +264,11 @@ func (s *RedisProductStore) RecordUsage(ctx context.Context, event UsageEvent) e
 	if err != nil {
 		return err
 	}
+	provider, model := normalizeUsageModel(event.Provider, event.Model)
+	modelRef := ""
+	if provider != "" && model != "" {
+		modelRef = s.opaqueRef("usage-model", provider+"\x00"+model)
+	}
 	month := event.OccurredAt.UTC().Format("2006-01")
 	usageKey := s.tenantKey(tenantRef, "usage:"+month)
 	dedupeKey := s.tenantKey(tenantRef, "usage-event:"+s.opaqueRef("usage-event", event.EventID))
@@ -233,6 +282,10 @@ func (s *RedisProductStore) RecordUsage(ctx context.Context, event UsageEvent) e
 			event.AlertCount,
 			month,
 			retentionSeconds,
+			modelRef,
+			maxUsageModelsPerTenantMonth,
+			provider,
+			model,
 		).Result()
 		return runErr
 	})
@@ -262,7 +315,7 @@ func (s *RedisProductStore) UsageForMonth(ctx context.Context, tenantID, month s
 	if err != nil {
 		return UsageTotals{}, fmt.Errorf("fraudguard: read usage from Redis: %w", err)
 	}
-	totals := UsageTotals{TenantRef: tenantRef, Month: month}
+	totals := UsageTotals{TenantRef: tenantRef, Month: month, ModelBreakdownComplete: true}
 	fields := []struct {
 		name string
 		dest *int64
@@ -284,6 +337,67 @@ func (s *RedisProductStore) UsageForMonth(ctx context.Context, tenantID, month s
 			*field.dest = parsed
 		}
 	}
+	if raw := values["model_breakdown_incomplete"]; raw != "" {
+		incomplete, parseErr := strconv.ParseInt(raw, 10, 64)
+		if parseErr != nil || incomplete < 0 {
+			return UsageTotals{}, errors.New("fraudguard: invalid Redis model-breakdown status")
+		}
+		totals.ModelBreakdownComplete = incomplete == 0
+	} else if totals.Requests > 0 && len(values) > 0 {
+		// Older ledger entries predate provider/model accounting.
+		totals.ModelBreakdownComplete = false
+	}
+	modelsByRef := make(map[string]*ModelUsage)
+	for field, raw := range values {
+		if !strings.HasPrefix(field, "model:") {
+			continue
+		}
+		parts := strings.Split(field, ":")
+		if len(parts) != 3 || len(parts[1]) != 64 {
+			return UsageTotals{}, errors.New("fraudguard: invalid Redis model-usage field")
+		}
+		modelUsage := modelsByRef[parts[1]]
+		if modelUsage == nil {
+			modelUsage = &ModelUsage{}
+			modelsByRef[parts[1]] = modelUsage
+		}
+		switch parts[2] {
+		case "provider":
+			modelUsage.Provider = raw
+		case "model":
+			modelUsage.Model = raw
+		case "requests", "prompt_tokens", "completion_tokens":
+			count, parseErr := strconv.ParseInt(raw, 10, 64)
+			if parseErr != nil || count < 0 {
+				return UsageTotals{}, errors.New("fraudguard: invalid Redis model-usage counter")
+			}
+			switch parts[2] {
+			case "requests":
+				modelUsage.Requests = count
+			case "prompt_tokens":
+				modelUsage.PromptTokens = count
+			case "completion_tokens":
+				modelUsage.CompletionTokens = count
+			}
+		default:
+			return UsageTotals{}, errors.New("fraudguard: unsupported Redis model-usage field")
+		}
+	}
+	for _, modelUsage := range modelsByRef {
+		provider, model := normalizeUsageModel(modelUsage.Provider, modelUsage.Model)
+		if provider == "" || model == "" || modelUsage.Requests == 0 {
+			return UsageTotals{}, errors.New("fraudguard: incomplete Redis model-usage record")
+		}
+		modelUsage.Provider = provider
+		modelUsage.Model = model
+		totals.Models = append(totals.Models, *modelUsage)
+	}
+	sort.Slice(totals.Models, func(i, j int) bool {
+		if totals.Models[i].Provider == totals.Models[j].Provider {
+			return totals.Models[i].Model < totals.Models[j].Model
+		}
+		return totals.Models[i].Provider < totals.Models[j].Provider
+	})
 	return totals, nil
 }
 
@@ -384,6 +498,28 @@ func validEventID(id string) bool {
 	for _, r := range id {
 		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') &&
 			!(r >= '0' && r <= '9') && r != '-' && r != '_' && r != '.' && r != ':' {
+			return false
+		}
+	}
+	return true
+}
+
+func normalizeUsageModel(provider, model string) (string, string) {
+	provider = strings.TrimSpace(provider)
+	model = strings.TrimSpace(model)
+	if !validUsageLabel(provider) || !validUsageLabel(model) {
+		return "", ""
+	}
+	return provider, model
+}
+
+func validUsageLabel(label string) bool {
+	if label == "" || len(label) > 128 {
+		return false
+	}
+	for _, r := range label {
+		if !(r >= 'a' && r <= 'z') && !(r >= 'A' && r <= 'Z') &&
+			!(r >= '0' && r <= '9') && r != '.' && r != '_' && r != '-' && r != '/' && r != ':' {
 			return false
 		}
 	}

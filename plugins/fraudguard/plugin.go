@@ -27,6 +27,8 @@ type productRequestContextKey struct{}
 type productRequestState struct {
 	tenantID      string
 	eventID       string
+	provider      string
+	model         string
 	occurredAt    time.Time
 	checkLatency  time.Duration
 	preFinding    Finding
@@ -193,6 +195,7 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 	// This is the authenticated internal row ID set by Bifrost governance, never
 	// the raw x-bf-vk header credential.
 	keyID := resolvedInternalVirtualKeyID(ctx)
+	provider, model, _ := req.GetRequestFields()
 	var handle Handle
 	if keyID != "" {
 		profiled = true
@@ -202,7 +205,6 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 			(!hasTierPolicy || !tierPolicy.Features.KeyStatusSignals) {
 			credentialStatus = CredentialStatus{}
 		}
-		provider, model, _ := req.GetRequestFields()
 		cohortID := ""
 		allowCrossKey := engineConfig.EnableCrossKeyCorrelation
 		if p.product != nil && p.product.services.PlanResolver != nil &&
@@ -296,6 +298,8 @@ func (p *Plugin) PreLLMHook(ctx *schemas.BifrostContext, req *schemas.BifrostReq
 			state := productRequestState{
 				tenantID:      tenantID,
 				eventID:       eventID,
+				provider:      string(provider),
+				model:         model,
 				occurredAt:    started.UTC(),
 				checkLatency:  time.Since(started),
 				preFinding:    assessment.Finding,
@@ -385,6 +389,8 @@ func (p *Plugin) PostLLMHook(ctx *schemas.BifrostContext, response *schemas.Bifr
 			p.product.SubmitUsage(UsageEvent{
 				EventID:           state.eventID,
 				TenantID:          state.tenantID,
+				Provider:          state.provider,
+				Model:             state.model,
 				OccurredAt:        state.occurredAt,
 				PromptTokens:      promptTokens,
 				CompletionTokens:  completionTokens,

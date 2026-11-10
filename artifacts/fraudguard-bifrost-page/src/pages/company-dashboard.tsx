@@ -11,25 +11,89 @@ import {
   ShieldCheck,
   TriangleAlert,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'wouter';
+import {
+  configuredLiveCostPath,
+  fetchLiveCostSummary,
+  type LiveCostLoadResult,
+} from '@/lib/live-cost-source';
+
+const syntheticProviderUsage = [
+  {
+    provider: 'OpenAI',
+    model: 'gpt-5.4-mini',
+    requests: 2,
+    inputTokens: 80_000,
+    outputTokens: 20_000,
+    inputRatePerMillion: 0.75,
+    outputRatePerMillion: 4.5,
+    sourceLabel: 'OpenAI API pricing',
+    sourceUrl: 'https://developers.openai.com/api/docs/pricing',
+    rateNote: 'Standard API rates',
+  },
+  {
+    provider: 'Anthropic',
+    model: 'Claude Sonnet 5.5',
+    requests: 1,
+    inputTokens: 80_000,
+    outputTokens: 30_000,
+    inputRatePerMillion: 2,
+    outputRatePerMillion: 10,
+    sourceLabel: 'Anthropic rate card',
+    sourceUrl: 'https://www-cdn.anthropic.com/files/4zrzovbb/website/f237fd89990be52c0f683eb5c9d19bc17667f10c.pdf',
+    rateNote: 'Standard · global',
+  },
+  {
+    provider: 'Google AI',
+    model: 'Gemini 3.8 Flash',
+    requests: 1,
+    inputTokens: 80_000,
+    outputTokens: 30_000,
+    inputRatePerMillion: 0.75,
+    outputRatePerMillion: 3.75,
+    sourceLabel: 'Gemini API pricing',
+    sourceUrl: 'https://ai.google.dev/gemini-api/docs/pricing',
+    rateNote: 'Current through Dec 31, 2026',
+  },
+] as const;
 
 const syntheticRiskUsage = {
-  flaggedRequests: 4,
-  promptTokens: 240_000,
-  completionTokens: 80_000,
-  promptRatePerMillion: 2,
-  completionRatePerMillion: 8,
+  flaggedRequests: syntheticProviderUsage.reduce((total, item) => total + item.requests, 0),
+  promptTokens: syntheticProviderUsage.reduce((total, item) => total + item.inputTokens, 0),
+  completionTokens: syntheticProviderUsage.reduce((total, item) => total + item.outputTokens, 0),
 };
 
-const modeledPromptCost =
-  syntheticRiskUsage.promptTokens / 1_000_000 * syntheticRiskUsage.promptRatePerMillion;
-const modeledCompletionCost =
-  syntheticRiskUsage.completionTokens / 1_000_000 * syntheticRiskUsage.completionRatePerMillion;
-const modeledPotentiallyAvoidableSpend = modeledPromptCost + modeledCompletionCost;
+const modeledPotentiallyAvoidableSpend = syntheticProviderUsage.reduce(
+  (total, item) =>
+    total +
+    item.inputTokens / 1_000_000 * item.inputRatePerMillion +
+    item.outputTokens / 1_000_000 * item.outputRatePerMillion,
+  0,
+);
 const formatDemoCurrency = (value: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(value);
+const formatRateCurrency = (value: number) =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 4,
+  }).format(value);
 const formatDemoTokens = (value: number) => new Intl.NumberFormat('en-US').format(value);
+
+const getProviderUsageCost = (item: (typeof syntheticProviderUsage)[number]) =>
+  item.inputTokens / 1_000_000 * item.inputRatePerMillion +
+  item.outputTokens / 1_000_000 * item.outputRatePerMillion;
+
+type CostSourceState = LiveCostLoadResult | { status: 'synthetic' | 'loading' };
+
+function liveCostStatusMessage(state: CostSourceState): string {
+  if (state.status === 'loading') return 'Checking the authenticated source.';
+  if (state.status === 'synthetic') return 'No live source is configured.';
+  if (state.status === 'ready') return '';
+  return 'message' in state ? state.message : '';
+}
 
 export default function CompanyDashboard() {
   const [findingType, setFindingType] = useState<'all' | 'behavior' | 'payment'>('all');
@@ -38,9 +102,45 @@ export default function CompanyDashboard() {
   const [showEmailPreview, setShowEmailPreview] = useState(false);
   const [smsAlertsEnabled, setSmsAlertsEnabled] = useState(true);
   const [showSmsPreview, setShowSmsPreview] = useState(false);
+  const [liveCostState, setLiveCostState] = useState<CostSourceState>(
+    () => configuredLiveCostPath ? { status: 'loading' } : { status: 'synthetic' },
+  );
   const showBehavior = (findingType === 'all' || findingType === 'behavior') && !alertOnly;
   const showPayment = (findingType === 'all' || findingType === 'payment');
   const visibleCount = Number(showBehavior) + Number(showPayment);
+
+  useEffect(() => {
+    if (!configuredLiveCostPath) {
+      setLiveCostState({ status: 'synthetic' });
+      return;
+    }
+    let stopped = false;
+    let activeController: AbortController | undefined;
+    const refreshLiveCost = async () => {
+      activeController?.abort();
+      activeController = new AbortController();
+      try {
+        const result = await fetchLiveCostSummary(configuredLiveCostPath, activeController.signal);
+        if (!stopped) setLiveCostState(result);
+      } catch (error) {
+        if (!stopped && !(error instanceof DOMException && error.name === 'AbortError')) {
+          setLiveCostState({
+            status: 'unavailable',
+            message: 'The configured live cost source is unavailable.',
+          });
+        }
+      }
+    };
+    void refreshLiveCost();
+    const timer = window.setInterval(() => void refreshLiveCost(), 60_000);
+    window.addEventListener('focus', refreshLiveCost);
+    return () => {
+      stopped = true;
+      activeController?.abort();
+      window.clearInterval(timer);
+      window.removeEventListener('focus', refreshLiveCost);
+    };
+  }, []);
 
   return (
     <main className="page-shell dashboard-page" data-testid="page-company-dashboard">
@@ -60,13 +160,14 @@ export default function CompanyDashboard() {
       <div className="dashboard-wrap">
         <section className="dashboard-intro">
           <div>
-            <div className="section-kicker">Operator view / synthetic preview</div>
+            <div className="section-kicker">{configuredLiveCostPath ? 'Operator view / live cost source · synthetic findings' : 'Operator view / synthetic preview'}</div>
             <h1>Behavior, in<br /><em>your review path.</em></h1>
             <p>A fixed illustration of how an organization could review findings from its own AI gateway traffic. This is not a live dashboard.</p>
           </div>
           <aside className="dashboard-org">
             <span className="dashboard-org-label">ILLUSTRATIVE ORGANIZATION</span>
-            <strong>AshaRatna Tech</strong>
+            <strong><a className="dashboard-org-link" href="https://asharatnatech.com" target="_blank" rel="noreferrer">AshaRatna Tech</a></strong>
+            <a className="dashboard-org-site" href="https://asharatnatech.com" target="_blank" rel="noreferrer">asharatnatech.com ↗</a>
             <span className="dashboard-org-note">Illustrative demo label · not a subscriber</span>
           </aside>
         </section>
@@ -75,9 +176,13 @@ export default function CompanyDashboard() {
           <TriangleAlert size={19} />
           <div>
             <strong>AshaRatna Tech is an illustrative demo label only—not a real subscriber account or an actual partnership.</strong>
-            <p>This fixed demo contains no AshaRatna Tech data. Display filters only change which synthetic findings are visible; no live traffic is filtered or blocked, and synthetic scores remain unchanged. There is no live feed and no live plugin events.</p>
+            <p>{configuredLiveCostPath
+              ? liveCostState.status === 'ready'
+                ? 'The authenticated AshaRatna cost summary is live. Behavior and payment findings below remain synthetic; no live traffic is filtered or blocked.'
+                : `Live cost mode is configured. ${liveCostStatusMessage(liveCostState)} Synthetic cost figures are hidden; behavior and payment findings remain synthetic.`
+              : 'This fixed demo contains no AshaRatna Tech data. Display filters only change which synthetic findings are visible; no live traffic is filtered or blocked, and synthetic scores remain unchanged. There is no live feed and no live plugin events.'}</p>
           </div>
-          <span className="dashboard-fixed-tag">FIXED DEMO</span>
+          <span className="dashboard-fixed-tag">{configuredLiveCostPath ? liveCostState.status === 'ready' ? 'LIVE COST · SYNTHETIC FINDINGS' : 'LIVE SOURCE PENDING' : 'FIXED DEMO'}</span>
         </section>
 
         <section className="dashboard-subscription" aria-label="Free hackathon demo and proposed commercial routes" data-testid="card-demo-subscription">
@@ -93,50 +198,76 @@ export default function CompanyDashboard() {
           </div>
         </section>
 
-        <section className="dashboard-spend-model" aria-label="Synthetic potentially avoidable spend estimate" data-testid="card-potentially-avoidable-spend">
-          <div className="spend-model-main">
-            <span className="spend-model-kicker">SYNTHETIC COST MODEL · NOT REALIZED SAVINGS</span>
-            <h2>Potentially avoidable spend</h2>
-            <strong className="spend-model-value" data-testid="value-potentially-avoidable">
-              {formatDemoCurrency(modeledPotentiallyAvoidableSpend)}
-            </strong>
-            <p>Estimated provider cost associated with {syntheticRiskUsage.flaggedRequests} synthetic flagged requests.</p>
-            <span className="spend-model-tag">COUNTERFACTUAL PROXY</span>
-          </div>
+        <section
+          className="dashboard-spend-model"
+          aria-label={configuredLiveCostPath ? 'Configured authenticated live cost estimate' : 'Synthetic potentially avoidable spend estimate'}
+          data-testid="card-potentially-avoidable-spend"
+        >
+          {configuredLiveCostPath ? (
+            <LiveCostPanel state={liveCostState} />
+          ) : (
+            <>
+              <div className="spend-model-main">
+                <span className="spend-model-kicker">PUBLIC LIST RATES · SYNTHETIC USAGE · NOT SAVINGS</span>
+                <h2>Potentially avoidable spend</h2>
+                <strong className="spend-model-value" data-testid="value-potentially-avoidable">
+                  {formatDemoCurrency(modeledPotentiallyAvoidableSpend)}
+                </strong>
+                <p>Modeled provider cost for {syntheticRiskUsage.flaggedRequests} synthetic AI requests if an operator had stopped them before provider submission. Payment events are excluded.</p>
+                <span className="spend-model-tag">COUNTERFACTUAL · OBSERVE-ONLY</span>
+              </div>
 
-          <div className="spend-model-detail">
-            <div className="spend-model-stats">
-              <div className="spend-model-stat">
-                <span>Flagged requests</span>
-                <strong>{syntheticRiskUsage.flaggedRequests}</strong>
+              <div className="spend-model-detail">
+                <div className="spend-model-stats">
+                  <div className="spend-model-stat">
+                    <span>AI requests in model mix</span>
+                    <strong>{syntheticRiskUsage.flaggedRequests}</strong>
+                  </div>
+                  <div className="spend-model-stat">
+                    <span>Input tokens</span>
+                    <strong>{formatDemoTokens(syntheticRiskUsage.promptTokens)}</strong>
+                  </div>
+                  <div className="spend-model-stat">
+                    <span>Output tokens</span>
+                    <strong>{formatDemoTokens(syntheticRiskUsage.completionTokens)}</strong>
+                  </div>
+                  <div className="spend-model-stat">
+                    <span>Public-rate estimate</span>
+                    <strong>{formatDemoCurrency(modeledPotentiallyAvoidableSpend)}</strong>
+                  </div>
+                </div>
+                <div className="spend-model-provider-breakdown" aria-label="Public model rates and synthetic usage breakdown">
+                  <div className="spend-model-provider-heading">
+                    <strong>Model-level rate calculation</strong>
+                    <span>USD per 1M tokens · checked Nov 10, 2026</span>
+                  </div>
+                  {syntheticProviderUsage.map((item) => (
+                    <div className="spend-model-provider-row" key={item.model}>
+                      <div className="spend-model-provider-model">
+                        <strong>{item.provider} · {item.model}</strong>
+                        <small>{item.requests} AI {item.requests === 1 ? 'request' : 'requests'} · {formatDemoTokens(item.inputTokens)} input / {formatDemoTokens(item.outputTokens)} output</small>
+                      </div>
+                      <div className="spend-model-provider-rates">
+                        <span>Input {formatRateCurrency(item.inputRatePerMillion)} · Output {formatRateCurrency(item.outputRatePerMillion)}</span>
+                        <small>{item.rateNote}</small>
+                        <a href={item.sourceUrl} target="_blank" rel="noreferrer">{item.sourceLabel}</a>
+                      </div>
+                      <strong className="spend-model-provider-cost">{formatRateCurrency(getProviderUsageCost(item))}</strong>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="spend-model-stat">
-                <span>Input tokens</span>
-                <strong>{formatDemoTokens(syntheticRiskUsage.promptTokens)}</strong>
-              </div>
-              <div className="spend-model-stat">
-                <span>Output tokens</span>
-                <strong>{formatDemoTokens(syntheticRiskUsage.completionTokens)}</strong>
-              </div>
-              <div className="spend-model-stat">
-                <span>Demo rate-card total</span>
-                <strong>{formatDemoCurrency(modeledPotentiallyAvoidableSpend)}</strong>
-              </div>
-            </div>
-            <div className="spend-model-math" aria-label="Illustrative token cost calculation">
-              <span>Input: {formatDemoTokens(syntheticRiskUsage.promptTokens)} × ${syntheticRiskUsage.promptRatePerMillion}/1M = {formatDemoCurrency(modeledPromptCost)}</span>
-              <span>Output: {formatDemoTokens(syntheticRiskUsage.completionTokens)} × ${syntheticRiskUsage.completionRatePerMillion}/1M = {formatDemoCurrency(modeledCompletionCost)}</span>
-            </div>
-          </div>
 
-          <aside className="spend-model-disclaimer" role="note">
-            <CircleHelp size={16} />
-            <div>
-              <strong>Demo assumptions only</strong>
-              <p>The sample rate card ($2 input / $8 output per million tokens) and token totals are synthetic, not provider prices. The estimate assumes an operator might later reject all flagged requests; none were blocked, so this is not realized savings.</p>
-              <p>No FraudGuard fee is configured, so net ROI is not shown. The Bifrost–AshaRatna API connection is not built; this card uses local demo data only.</p>
-            </div>
-          </aside>
+              <aside className="spend-model-disclaimer" role="note">
+                <CircleHelp size={16} />
+                <div>
+                  <strong>Rate sources are real; usage and outcome are synthetic</strong>
+                  <p>The model names and token totals are a fixed demo mix. Rates are official public standard text-token list prices, not AshaRatna customer invoices. The estimate excludes cached tokens, long-context pricing, tools/grounding, batch discounts, regional uplifts, credits, negotiated discounts, and taxes. Google lists a Gemini 3.8 Flash price change for Jan 1, 2027.</p>
+                  <p>No requests were blocked: this is not realized savings. The live tenant feed and FraudGuard fee are not configured, so this is not a net-ROI calculation.</p>
+                </div>
+              </aside>
+            </>
+          )}
         </section>
 
         <section className="dashboard-toolbar" aria-label="Preview status">
@@ -353,15 +484,16 @@ export default function CompanyDashboard() {
 
         <section className="dashboard-path" data-testid="content-dashboard-integration-path">
           <div className="dashboard-path-heading">
-            <div className="section-kicker">The last step, accurately</div>
-            <h2>A callback could<br /><em>feed your sink.</em></h2>
+            <div className="section-kicker">Selected API direction · not live</div>
+            <h2>AshaRatna pulls<br /><em>from Bifrost.</em></h2>
           </div>
           <div className="dashboard-path-copy">
-            <p>In a real host integration, the plugin’s sanitized <code>OnFinding</code> callback could feed a company-owned sink or dashboard. Findings omit raw keys and prompts.</p>
+            <p>Use Bifrost’s host-mounted, authenticated usage-export API as the source of truth. AshaRatna pulls tenant-scoped reports; the gateway host authenticates the company and resolves the tenant. Provider credentials, prompts, and raw virtual keys stay in Bifrost.</p>
             <div className="dashboard-path-flow" aria-label="Proposed finding flow">
-              <span>Bifrost plugin</span><ArrowRight size={14} /><span>Sanitized finding</span><ArrowRight size={14} /><span>Company-owned sink</span>
+              <span>Bifrost private export</span><ArrowRight size={14} /><span>AshaRatna service</span><ArrowRight size={14} /><span>Company dashboard</span>
             </div>
-            <p className="dashboard-path-caveat"><CircleHelp size={14} /> This page is not connected to that callback. No live plugin events reach this UI.</p>
+            <p className="dashboard-path-api">GET /admin/fraudguard/usage-export?month=YYYY-MM</p>
+            <p className="dashboard-path-caveat"><CircleHelp size={14} /> The Go module now exports bounded provider/model token aggregates with an explicit completeness flag. This page’s rows remain synthetic; live API mounting, tenant login, and the AshaRatna connection are not configured here.</p>
           </div>
         </section>
 
@@ -386,5 +518,71 @@ export default function CompanyDashboard() {
         </footer>
       </div>
     </main>
+  );
+}
+
+function LiveCostPanel({
+  state,
+}: {
+  state: CostSourceState;
+}) {
+  const summary = state.status === 'ready' ? state.summary : undefined;
+  const stateMessage = state.status === 'loading'
+    ? 'Connecting to the configured authenticated source…'
+    : liveCostStatusMessage(state);
+
+  return (
+    <>
+      <div className="spend-model-main">
+        <span className="spend-model-kicker">ASHARATNA AUTHENTICATED COST SUMMARY</span>
+        <h2>Estimated provider cost</h2>
+        <strong className="spend-model-value" data-testid="value-live-cost">
+          {summary ? formatDemoCurrency(summary.estimatedCostUSD) : '—'}
+        </strong>
+        <p>{summary
+          ? `Estimated provider usage cost for ${summary.period}. This is not an invoice or money saved.`
+          : stateMessage}</p>
+        <span className="spend-model-tag">{summary ? 'LIVE USAGE ESTIMATE' : 'LIVE SOURCE NOT READY'}</span>
+      </div>
+
+      {summary ? (
+        <div className="spend-model-detail">
+          <div className="spend-model-stats">
+            <div className="spend-model-stat"><span>Usage period</span><strong>{summary.period}</strong></div>
+            <div className="spend-model-stat"><span>AI requests</span><strong>{formatDemoTokens(summary.requests)}</strong></div>
+            <div className="spend-model-stat"><span>Input tokens</span><strong>{formatDemoTokens(summary.promptTokens)}</strong></div>
+            <div className="spend-model-stat"><span>Output tokens</span><strong>{formatDemoTokens(summary.completionTokens)}</strong></div>
+          </div>
+          <div className="spend-model-provider-breakdown">
+            <div className="spend-model-provider-heading">
+              <strong>AshaRatna rate-card basis</strong>
+              <span>Supplied by the authenticated server response</span>
+            </div>
+            <div className="spend-model-live-rate">
+              <span>{summary.rateCardSource}</span>
+              <strong>Effective {summary.rateCardAsOf}</strong>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="spend-model-detail">
+          <div className="spend-model-live-state" role="status" aria-live="polite" data-testid="status-live-cost-source">
+            <CircleHelp size={17} />
+            <div>
+              <strong>{stateMessage}</strong>
+              <p>No synthetic cost amount is shown while live mode is configured but the authenticated source is missing, unavailable, or incomplete.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <aside className="spend-model-disclaimer" role="note">
+        <CircleHelp size={16} />
+        <div>
+          <strong>Live data needs an authenticated AshaRatna server route</strong>
+          <p>The same-origin route must authenticate the signed-in company, resolve its tenant server-side, and pull a complete usage export from Bifrost. The browser receives no provider credentials or raw virtual keys. Findings below remain synthetic unless a separate live findings source is connected.</p>
+        </div>
+      </aside>
+    </>
   );
 }

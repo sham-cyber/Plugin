@@ -4,6 +4,7 @@
 package fraudguard
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,6 +12,15 @@ import (
 )
 
 type AdminAuthorizer func(*http.Request) bool
+
+// TierDistributionResolver must return aggregate plan counts from a trusted
+// host source without tenant identifiers.
+type TierDistributionResolver func(context.Context) (map[PlanTier]int64, error)
+
+type AdminHandlerOptions struct {
+	Authorize        AdminAuthorizer
+	TierDistribution TierDistributionResolver
+}
 
 type AdminStatus struct {
 	SchemaVersion      string               `json:"schema_version"`
@@ -39,10 +49,17 @@ type AdminDashboard struct {
 // must provide authorization and bind the handler to a private admin listener.
 // There is deliberately no tenant inspection, penalty-box, or block-log route.
 func NewAdminHandler(plugin *Plugin, authorize AdminAuthorizer) (http.Handler, error) {
+	return NewAdminHandlerWithOptions(plugin, AdminHandlerOptions{Authorize: authorize})
+}
+
+// NewAdminHandlerWithOptions creates authenticated aggregate-only diagnostics.
+// A host may supply authoritative tier counts; otherwise only the current
+// process's cached policy distribution is reported.
+func NewAdminHandlerWithOptions(plugin *Plugin, options AdminHandlerOptions) (http.Handler, error) {
 	if plugin == nil || plugin.engine == nil {
 		return nil, errors.New("fraudguard: initialized plugin is required")
 	}
-	if authorize == nil {
+	if options.Authorize == nil {
 		return nil, errors.New("fraudguard: admin authorization callback is required")
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -51,7 +68,7 @@ func NewAdminHandler(plugin *Plugin, authorize AdminAuthorizer) (http.Handler, e
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if !authorize(r) {
+		if !options.Authorize(r) {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
@@ -81,6 +98,25 @@ func NewAdminHandler(plugin *Plugin, authorize AdminAuthorizer) (http.Handler, e
 				Status:      status,
 				AdminStatus: snapshot,
 			})
+		case "/admin/fraudguard/monetization":
+			w.Header().Set("Content-Type", "application/json; charset=utf-8")
+			stats := buildMonetizationStats(plugin)
+			if options.TierDistribution != nil {
+				distribution, err := options.TierDistribution(r.Context())
+				if err == nil {
+					distribution, err = validateTierDistribution(distribution)
+				}
+				if err != nil {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					_ = json.NewEncoder(w).Encode(struct {
+						Error string `json:"error"`
+					}{Error: "monetization_snapshot_unavailable"})
+					return
+				}
+				stats.TierDistribution = distribution
+				stats.TierDistributionScope = "host_authoritative_aggregate"
+			}
+			_ = json.NewEncoder(w).Encode(stats)
 		case "/admin/fraudguard/healthz":
 			w.Header().Set("Content-Type", "application/json; charset=utf-8")
 			product := plugin.ProductMetrics()

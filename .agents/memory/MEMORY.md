@@ -4,3 +4,4 @@
 - [FraudGuard API-key provision](fraudguard-api-key-provision.md) — the user expects API keys to be provided for the plugin; clarify their type and destination before implementation.
 - [FraudGuard production hardening](fraudguard-hackathon-focus.md) — preserve observe-only handling; prompt checks stay opt-in and transient, and live production requires gateway integration and validation.
 - [FraudGuard hot-path benchmarks](fraudguard-hot-path-benchmarks.md) — keep bounded history eviction allocation-light and report engine benchmarks separately from end-to-end gateway latency.
+- [AshaRatna data flow](fraudguard-asha-integration.md) — use tenant-authorized Bifrost pull exports; keep public-rate cost estimates outside the plugin and counterfactual.

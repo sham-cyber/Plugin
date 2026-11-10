@@ -21,16 +21,16 @@ import (
 // audit, and webhook services. All external work runs outside the request hook
 // on a bounded queue.
 type ProductServices struct {
-	TenantResolver func(*schemas.BifrostContext) string
-	UsageLedger    UsageLedger
-	PlanResolver   TenantTierResolver
-	Policies       *TierPolicyCatalog
-	AuditLog       AuditLog
-	Webhooks       AuditWebhookSender
-	QueueSize      int
-	Workers        int
-	Timeout        time.Duration
-	PolicyCacheTTL time.Duration
+	TenantResolver    func(*schemas.BifrostContext) string
+	UsageLedger       UsageLedger
+	PlanResolver      TenantTierResolver
+	Policies          *TierPolicyCatalog
+	AuditLog          AuditLog
+	Webhooks          AuditWebhookSender
+	QueueSize         int
+	Workers           int
+	Timeout           time.Duration
+	PolicyCacheTTL    time.Duration
 	MaxCachedPolicies int
 }
 
@@ -48,12 +48,13 @@ type ProductMetrics struct {
 }
 
 type ProductRuntime struct {
-	services ProductServices
-	queue    chan productEvent
-	mu       sync.RWMutex
-	closed   bool
-	wg       sync.WaitGroup
-	policyCache *tierPolicyLRU
+	services        ProductServices
+	queue           chan productEvent
+	mu              sync.RWMutex
+	closed          bool
+	wg              sync.WaitGroup
+	policyCache     *tierPolicyLRU
+	overageNotifier *OverageNotifier
 
 	queued        atomic.Uint64
 	dropped       atomic.Uint64
@@ -126,10 +127,15 @@ func NewProductRuntime(services ProductServices) (*ProductRuntime, error) {
 	if err != nil {
 		return nil, err
 	}
+	overageNotifier, err := NewOverageNotifier(OverageNotifierConfig{})
+	if err != nil {
+		return nil, err
+	}
 	runtime := &ProductRuntime{
-		services: services,
-		queue:    make(chan productEvent, services.QueueSize),
-		policyCache: policyCache,
+		services:        services,
+		queue:           make(chan productEvent, services.QueueSize),
+		policyCache:     policyCache,
+		overageNotifier: overageNotifier,
 	}
 	for range services.Workers {
 		runtime.wg.Add(1)
@@ -179,6 +185,19 @@ func (r *ProductRuntime) ResolvePolicy(ctx context.Context, tenantID string) (Ti
 	}
 	if cached, ok := r.CachedPolicy(tenantID); ok {
 		return cached, true, nil
+	}
+	return r.RefreshPolicy(ctx, tenantID)
+}
+
+// RefreshPolicy bypasses the cache and fetches the latest plan from the trusted
+// host resolver. Hosts should call this after verifying and applying a billing
+// or subscription update; inference hooks never perform the lookup themselves.
+func (r *ProductRuntime) RefreshPolicy(ctx context.Context, tenantID string) (TierPolicy, bool, error) {
+	if r == nil || r.services.PlanResolver == nil {
+		return TierPolicy{}, false, nil
+	}
+	if strings.TrimSpace(tenantID) == "" {
+		return TierPolicy{}, false, ErrInvalidTenantID
 	}
 	tier, err := r.services.PlanResolver.ResolveTenantTier(ctx, tenantID)
 	if err != nil {
@@ -299,26 +318,53 @@ func (r *ProductRuntime) process(event productEvent) error {
 		evaluation := policy.EvaluateUsage(totals)
 		if evaluation.RequestWarning || evaluation.TokenWarning || evaluation.Exceeded {
 			kind := "usage_limit_warning"
+			stage := OverageStageNearLimit
 			if evaluation.Exceeded {
 				kind = "usage_limit_exceeded"
+				stage = OverageStageExceeded
+			}
+			period := event.usage.OccurredAt.UTC().Format("2006-01")
+			first, err := r.claimOverageAlert(ctx, event.tenantID, period, policy.Tier, stage)
+			if err != nil {
+				return fmt.Errorf("claim overage notification: %w", err)
+			}
+			if !first {
+				return nil
 			}
 			record := AuditEvent{
 				ID:            event.eventID + ":plan",
 				OccurredAt:    event.usage.OccurredAt.UTC(),
 				Kind:          kind,
-				Alert:         evaluation.Exceeded,
+				Alert:         true,
 				PlanTier:      policy.Tier,
 				PolicyOutcome: evaluation.Outcome,
 				Requests:      totals.Requests,
 				TotalTokens:   totals.PromptTokens + totals.CompletionTokens,
 			}
 			webhookAllowed := policy.Features.WebhookAlerts
-			if err := r.appendAuditAndNotify(ctx, event.tenantID, record, evaluation.Exceeded && webhookAllowed); err != nil {
+			if err := r.appendAuditAndNotify(ctx, event.tenantID, record, webhookAllowed); err != nil {
+				releaseCtx, cancel := context.WithTimeout(context.Background(), r.services.Timeout)
+				_ = r.releaseOverageAlert(releaseCtx, event.tenantID, period, policy.Tier, stage)
+				cancel()
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+func (r *ProductRuntime) claimOverageAlert(ctx context.Context, tenantID, month string, tier PlanTier, stage OverageStage) (bool, error) {
+	if deduper, ok := r.services.UsageLedger.(OverageAlertDeduper); ok {
+		return deduper.ClaimOverageAlert(ctx, tenantID, month, tier, stage)
+	}
+	return r.overageNotifier.ClaimOverageAlert(ctx, tenantID, month, tier, stage)
+}
+
+func (r *ProductRuntime) releaseOverageAlert(ctx context.Context, tenantID, month string, tier PlanTier, stage OverageStage) error {
+	if deduper, ok := r.services.UsageLedger.(OverageAlertDeduper); ok {
+		return deduper.ReleaseOverageAlert(ctx, tenantID, month, tier, stage)
+	}
+	return r.overageNotifier.ReleaseOverageAlert(ctx, tenantID, month, tier, stage)
 }
 
 func (r *ProductRuntime) appendAuditAndNotify(ctx context.Context, tenantID string, event AuditEvent, alert bool) error {

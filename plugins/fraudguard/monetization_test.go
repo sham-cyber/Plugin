@@ -86,7 +86,7 @@ func TestBillingExportHandlerUsesTrustedTenantAndReturnsAmountFreeUsage(t *testi
 	if err := json.Unmarshal(recorder.Body.Bytes(), &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.SchemaVersion != "fraudguard.usage.v1" || report.TenantRef != "opaque-tenant-digest" ||
+	if report.SchemaVersion != "fraudguard.usage.v2" || report.TenantRef != "opaque-tenant-digest" ||
 		report.Usage.Requests != 8 || report.Plan == nil || report.Plan.Tier != PlanPro {
 		t.Fatalf("unexpected billing export: %+v", report)
 	}

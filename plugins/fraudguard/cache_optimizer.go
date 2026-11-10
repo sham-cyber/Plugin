@@ -96,3 +96,23 @@ func (cache *tierPolicyLRU) len() int {
 	defer cache.mu.Unlock()
 	return cache.order.Len()
 }
+
+func (cache *tierPolicyLRU) countByTier(now time.Time) map[PlanTier]int64 {
+	counts := make(map[PlanTier]int64)
+	if cache == nil {
+		return counts
+	}
+	cache.mu.Lock()
+	defer cache.mu.Unlock()
+	for element := cache.order.Front(); element != nil; {
+		next := element.Next()
+		entry := element.Value.(*tierPolicyCacheEntry)
+		if !now.Before(entry.cached.expiresAt) {
+			cache.remove(element)
+		} else {
+			counts[entry.cached.policy.Tier]++
+		}
+		element = next
+	}
+	return counts
+}

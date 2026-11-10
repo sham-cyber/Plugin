@@ -64,7 +64,7 @@ func BuildUsageExport(
 		return UsageExport{}, err
 	}
 	result := UsageExport{
-		SchemaVersion: "fraudguard.usage.v1",
+		SchemaVersion: "fraudguard.usage.v2",
 		GeneratedAt:   time.Now().UTC(),
 		Period:        month,
 		TenantRef:     usage.TenantRef,

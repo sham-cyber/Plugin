@@ -85,6 +85,9 @@
 .dashboard-org { min-width:230px; padding:17px 20px; border:1px solid #d4d4c8; border-left:3px solid #dc805b; background:#ebe9df; display:flex; flex-direction:column; gap:6px; }
 .dashboard-org-label,.dashboard-index,.dashboard-label { color:#6e807a; font:9px var(--app-font-mono); letter-spacing:.11em; text-transform:uppercase; }
 .dashboard-org strong { color:#294849; font:24px/1.05 var(--app-font-serif); font-weight:400; }
+.dashboard-org-link { color:inherit; text-decoration:underline; text-decoration-color:#c8a48d; text-underline-offset:4px; }
+.dashboard-org-link:focus-visible,.dashboard-org-site:focus-visible { outline:2px solid #1c6658; outline-offset:3px; }
+.dashboard-org-site { color:#1c6658; font:9px var(--app-font-mono); text-decoration:underline; text-underline-offset:2px; }
 .dashboard-org-note { color:#78837e; font:9px var(--app-font-mono); }
 .dashboard-disclaimer { display:flex; gap:14px; align-items:flex-start; padding:17px 20px; background:#f5e7da; border:1px solid #e2c5ae; color:#654333; }
 .dashboard-disclaimer > svg { flex:none; margin-top:2px; color:#b45f43; }
@@ -250,11 +253,29 @@
 .spend-model-stat { padding:11px 13px; background:#fbf8ef; border:1px solid #d8d5c9; }
 .spend-model-stat span { display:block; color:#71817b; font:8px var(--app-font-mono); letter-spacing:.05em; text-transform:uppercase; }
 .spend-model-stat strong { display:block; margin-top:6px; color:#294a49; font:16px var(--app-font-mono); }
-.spend-model-math { display:grid; gap:5px; color:#61736f; font:9px/1.6 var(--app-font-mono); }
+.spend-model-provider-breakdown { display:grid; gap:0; background:#f7f4eb; border:1px solid #d8d5c9; }
+.spend-model-provider-heading { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:9px 11px; color:#536d66; }
+.spend-model-provider-heading strong { font-size:10px; }
+.spend-model-provider-heading span { color:#71817b; font:8px var(--app-font-mono); text-align:right; }
+.spend-model-provider-row { display:grid; grid-template-columns:minmax(145px,1.15fr) minmax(170px,1.2fr) auto; align-items:center; gap:12px; padding:10px 11px; border-top:1px solid #dfddd2; }
+.spend-model-provider-model strong { display:block; color:#294a49; font-size:10px; line-height:1.45; }
+.spend-model-provider-model small { display:block; margin-top:3px; color:#71817b; font:8px/1.5 var(--app-font-mono); }
+.spend-model-provider-rates span { display:block; color:#536d66; font:9px/1.5 var(--app-font-mono); }
+.spend-model-provider-rates small { display:block; margin-top:2px; color:#71817b; font-size:8px; line-height:1.45; }
+.spend-model-provider-rates a { display:inline-block; margin-top:3px; color:#1c6658; font-size:8px; text-decoration:underline; text-underline-offset:2px; }
+.spend-model-provider-cost { color:#1c6658; font:12px var(--app-font-mono); white-space:nowrap; }
 .spend-model-disclaimer { grid-column:1/-1; display:flex; align-items:flex-start; gap:10px; padding:12px 14px; background:#f5e7da; border:1px solid #e2c5ae; color:#654333; }
 .spend-model-disclaimer > svg { flex:none; margin-top:2px; color:#b45f43; }
 .spend-model-disclaimer strong { display:block; font-size:10px; line-height:1.5; }
 .spend-model-disclaimer p { margin:4px 0 0; color:#86634e; font-size:9px; line-height:1.6; }
+.spend-model-live-state { display:flex; align-items:flex-start; gap:11px; padding:18px; background:#f5e7da; border:1px solid #e2c5ae; color:#654333; }
+.spend-model-live-state > svg { flex:none; margin-top:2px; color:#b45f43; }
+.spend-model-live-state strong { display:block; font-size:12px; line-height:1.5; }
+.spend-model-live-state p { margin:6px 0 0; color:#86634e; font-size:10px; line-height:1.65; }
+.spend-model-live-rate { display:flex; justify-content:space-between; gap:12px; padding:13px 15px; background:#f2f0e6; color:#31584f; font-size:10px; }
+.spend-model-live-rate strong { color:#71817b; font:9px var(--app-font-mono); text-align:right; }
+.dashboard-path-api { display:inline-block; margin:0 0 8px; padding:5px 7px; background:#f7f4eb; color:#31584f; font:9px var(--app-font-mono); overflow-wrap:anywhere; }
+.dashboard-path-copy .dashboard-path-api { margin-bottom:8px; }
 @media(max-width:850px) {
   .dashboard-controls { align-items:flex-start; flex-direction:column; }
   .finding-filter { width:100%; flex-wrap:wrap; }
@@ -297,6 +318,14 @@
   .spend-model-stat { padding:10px; }
   .spend-model-stat strong { font-size:14px; }
   .spend-model-disclaimer { padding:11px; }
+  .spend-model-provider-heading { align-items:flex-start; flex-direction:column; gap:4px; }
+  .spend-model-provider-heading span { text-align:left; }
+  .spend-model-provider-row { grid-template-columns:minmax(0,1fr) auto; gap:7px 10px; }
+  .spend-model-provider-model { grid-column:1/-1; }
+  .spend-model-provider-rates { grid-column:1; }
+  .spend-model-provider-cost { grid-column:2; grid-row:2; }
+  .spend-model-provider-rates span { font-size:8px; }
+  .spend-model-provider-rates small,.spend-model-provider-rates a { font-size:8px; }
   .dashboard-disclaimer { padding:14px; gap:10px; }
   .dashboard-disclaimer strong { font-size:10px; }
   .dashboard-fixed-tag { display:none; }
@@ -1090,6 +1119,19 @@ a:focus-visible,button:focus-visible { outline:3px solid #d67c58;outline-offset:
 .business-model-revenue strong { display:block; margin:17px 0 8px; font:25px/1.08 var(--app-font-serif); font-weight:400; }
 .business-model-revenue p { margin:0; color:#c4d2c8; font-size:11px; line-height:1.7; }
 .business-model-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:15px; margin-top:38px; }
+.business-model-economics { display:grid; grid-template-columns:1.2fr .8fr; gap:14px; margin-top:15px; }
+.business-model-finance,.business-model-cost { padding:20px 21px; background:#f8f5eb; border:1px solid #d1d5ca; }
+.business-model-finance h3 { margin:12px 0 8px; color:#294849; font:24px/1.08 var(--app-font-serif); font-weight:400; }
+.business-model-finance > p,.business-model-cost > p { margin:0; color:#627370; font-size:10px; line-height:1.7; }
+.business-model-formula { display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:15px 0 11px; }
+.business-model-formula > div { padding:10px 11px; background:#efeee5; border:1px solid #ddded3; }
+.business-model-formula span { display:block; color:#71817b; font:8px var(--app-font-mono); letter-spacing:.06em; text-transform:uppercase; }
+.business-model-formula strong { display:block; margin-top:6px; color:#31584f; font:10px/1.6 var(--app-font-mono); }
+.business-model-finance .business-model-finance-note { color:#88664e; font-size:9px; }
+.business-model-cost { display:flex; flex-direction:column; align-items:flex-start; border-top:3px solid #db805b; }
+.business-model-cost-value { margin:12px 0 7px; color:#1c6658; font:500 46px/.95 var(--app-font-sans); letter-spacing:-.07em; }
+.business-model-cost-link { display:inline-flex; align-items:center; gap:8px; margin-top:auto; padding-top:14px; color:#1c6658; font:10px var(--app-font-mono); text-decoration:underline; text-underline-offset:3px; }
+.business-model-cost-link:focus-visible { outline:2px solid #1c6658; outline-offset:3px; }
 .business-model-card { min-height:320px; display:flex; flex-direction:column; padding:22px 21px; background:#f8f5eb; border:1px solid #d1d5ca; }
 .business-model-card h3 { margin:15px 0 8px; color:#294849; font:25px/1.05 var(--app-font-serif); font-weight:400; }
 .business-model-card > p { min-height:70px; margin:0; color:#627370; font-size:11px; line-height:1.7; }
@@ -1106,10 +1148,13 @@ a:focus-visible,button:focus-visible { outline:3px solid #d67c58;outline-offset:
 @media(max-width:850px) {
   .business-model-intro { grid-template-columns:1fr; gap:24px; }
   .business-model-grid { grid-template-columns:1fr 1fr; }
+  .business-model-economics { grid-template-columns:1fr; }
 }
 @media(max-width:600px) {
   .business-model-grid { grid-template-columns:1fr; }
   .business-model-card { min-height:0; }
   .business-model-card > p { min-height:0; }
   .business-model-revenue { padding:20px; }
+  .business-model-finance,.business-model-cost { padding:17px; }
+  .business-model-formula { grid-template-columns:1fr; }
 }

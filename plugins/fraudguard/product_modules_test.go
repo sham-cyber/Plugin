@@ -44,6 +44,8 @@ func TestRedisUsageLedgerIsIdempotentAndHidesTenantID(t *testing.T) {
 	event := UsageEvent{
 		EventID:           "request-00000001",
 		TenantID:          "sensitive-company-identifier",
+		Provider:          "openai",
+		Model:             "gpt-5.4-mini",
 		OccurredAt:        time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC),
 		PromptTokens:      120,
 		CompletionTokens:  40,
@@ -64,6 +66,12 @@ func TestRedisUsageLedgerIsIdempotentAndHidesTenantID(t *testing.T) {
 	if totals.Requests != 1 || totals.PromptTokens != 120 || totals.CompletionTokens != 40 ||
 		totals.FraudChecks != 1 || totals.FraudCheckMicros != 7000 || totals.Findings != 1 || totals.Alerts != 1 {
 		t.Fatalf("unexpected usage totals: %+v", totals)
+	}
+	if !totals.ModelBreakdownComplete || len(totals.Models) != 1 ||
+		totals.Models[0].Provider != "openai" || totals.Models[0].Model != "gpt-5.4-mini" ||
+		totals.Models[0].Requests != 1 || totals.Models[0].PromptTokens != 120 ||
+		totals.Models[0].CompletionTokens != 40 {
+		t.Fatalf("provider/model usage was not aggregated: %+v", totals)
 	}
 	if totals.TenantRef == "" || totals.TenantRef == event.TenantID {
 		t.Fatalf("tenant was not pseudonymized: %q", totals.TenantRef)
@@ -164,6 +172,7 @@ func TestUsageExportIsVersionedAndContainsNoRawTenantOrPrice(t *testing.T) {
 	ctx := context.Background()
 	if err := store.RecordUsage(ctx, UsageEvent{
 		EventID: "export-00000001", TenantID: "tenant-private-123",
+		Provider: "anthropic", Model: "claude-sonnet-5-5",
 		OccurredAt:   time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC),
 		PromptTokens: 10, CompletionTokens: 5, FraudCheckLatency: time.Millisecond,
 	}); err != nil {
@@ -189,8 +198,11 @@ func TestUsageExportIsVersionedAndContainsNoRawTenantOrPrice(t *testing.T) {
 	if err := json.Unmarshal(payload, &report); err != nil {
 		t.Fatal(err)
 	}
-	if report.SchemaVersion != "fraudguard.usage.v1" || report.Period != "2026-11" ||
-		report.Usage.Requests != 1 || report.Plan == nil || report.Plan.Tier != PlanFree {
+	if report.SchemaVersion != "fraudguard.usage.v2" || report.Period != "2026-11" ||
+		report.Usage.Requests != 1 || !report.Usage.ModelBreakdownComplete ||
+		len(report.Usage.Models) != 1 || report.Usage.Models[0].Provider != "anthropic" ||
+		report.Usage.Models[0].Model != "claude-sonnet-5-5" ||
+		report.Plan == nil || report.Plan.Tier != PlanFree {
 		t.Fatalf("unexpected export: %+v", report)
 	}
 	noExportCatalog, err := NewTierPolicyCatalog([]TierPolicy{{Tier: PlanFree, AlertThreshold: 60}})

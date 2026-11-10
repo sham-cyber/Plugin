@@ -415,6 +415,34 @@ function Home() {
           </article>
         </div>
 
+        <div className="business-model-economics" data-testid="overview-money-and-cost-tracker">
+          <section className="business-model-finance">
+            <span className="business-model-label">PROJECT MONEY OVERVIEW · NO PROFIT FORECAST</span>
+            <h3>Free core. Paid service. No profit claim.</h3>
+            <p>The open-source plugin is free to review. AshaRatna’s proposed revenue comes from an optional managed company service; a Bifrost channel would require a separate agreement. One gateway deployment may serve many keys.</p>
+            <div className="business-model-formula">
+              <div>
+                <span>Possible monthly revenue</span>
+                <strong>Active subscriptions × agreed price + optional overage</strong>
+              </div>
+              <div>
+                <span>Possible net contribution</span>
+                <strong>Revenue − hosting, storage, billing, operations, and support</strong>
+              </div>
+            </div>
+            <p className="business-model-finance-note">No price, customer count, sales forecast, or profit is validated. This is a business model, not a guarantee.</p>
+          </section>
+
+          <aside className="business-model-cost" data-testid="overview-cost-tracker-preview">
+            <span className="business-model-label">ASHARATNA COST TRACKER · SYNTHETIC</span>
+            <strong className="business-model-cost-value">$0.78</strong>
+            <p>Example provider cost for four synthetic AI requests using public model rates. No requests were blocked; this is not money saved.</p>
+            <Link href="/company-dashboard" className="business-model-cost-link" data-testid="link-overview-cost-tracker">
+              Open the cost tracker <ArrowRight size={14} />
+            </Link>
+          </aside>
+        </div>
+
         <div className="business-model-boundary" data-testid="note-paid-service-boundary">
           <strong>Provider keys and FraudGuard access are different.</strong>
           <p>Companies keep their own model-provider API keys in Bifrost. A future FraudGuard entitlement would be a separate key; this prototype does not issue or verify one. Because the core is Apache-2.0, paid value should come from a managed service, added operations, or support—not a claim that users cannot run the open-source plugin.</p>
