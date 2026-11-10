@@ -2,6 +2,8 @@
 
 This project contains a production-oriented, observe-only Go plugin module for the Bifrost AI gateway, plus a synthetic hackathon demo. It looks for request-behavior changes that fixed request-count limits can miss, with separate opt-in signals for trusted payment events, credential status, bounded prompt checks, and transient multi-turn context heuristics. It reports findings; it never blocks requests or payments. A local integration overlay and Compose smoke-demo path are provided, but this is not an upstream feature or a production deployment; shared multi-replica behavior, trusted external sources, and production workload verification remain outstanding.
 
+**Live demo:** [https://bifrost-fraud-detection-plugin.replit.app](https://bifrost-fraud-detection-plugin.replit.app) — Public synthetic demo page; it is not connected to live customer data or a production Bifrost deployment.
+
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
 ## Project documents
