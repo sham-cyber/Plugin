@@ -10,7 +10,7 @@ $(warning GOSUMDB=off disables public module checksum verification; using sum.go
 override GOSUMDB = sum.golang.org
 endif
 
-.PHONY: help setup build test race vet bench demo simulate chaos redis-check integration verify
+.PHONY: help setup build test race vet bench demo simulate chaos redis-check integration sanity verify
 
 help:
 	@printf '%s\n' \
@@ -25,6 +25,7 @@ help:
 		'  make chaos        Run local Redis/slow-service fault tests' \
 		'  make redis-check  Ping FRAUDGUARD_REDIS_URL without printing it' \
 		'  make integration Verify against the pinned Bifrost source (set BIFROST_ROOT)' \
+		'  make sanity      Run the local release sanity test with miniredis' \
 		'  make verify       Run tests, race, vet, and demo'
 
 setup:
@@ -58,5 +59,8 @@ redis-check:
 
 integration:
 	GOSUMDB=$(GOSUMDB) BIFROST_ROOT="$(BIFROST_ROOT)" bash scripts/verify-pinned-bifrost.sh
+
+sanity:
+	GOSUMDB=$(GOSUMDB) $(GO) test -count=1 -run '^TestReleaseSanityObserveOnly$$' ./...
 
 verify: build test race vet demo

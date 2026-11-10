@@ -18,6 +18,9 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 
 [Read the monetization architecture](MONETIZATION.md)
 [Read the hackathon pitch](PITCH.md)
+[Read the presentation outline](PRESENTATION.md)
+[Read the release manifest](RELEASE.md)
+[Run local release checks](scripts/deploy.sh)
 
 ## Verification Report — What Was Checked and What It Proves
 
@@ -92,6 +95,7 @@ git clone https://github.com/sham-cyber/Plugin.git
 cd Plugin
 cd plugins/fraudguard
 go test ./...
+go test -run '^TestReleaseSanityObserveOnly$' -count=1 ./...
 go test -race ./...
 go vet ./...
 go run ./cmd/demo
