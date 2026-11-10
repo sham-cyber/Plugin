@@ -21,12 +21,15 @@ At that commit, an LLM plugin implements `schemas.LLMPlugin`:
 The standalone module pins `github.com/maximhq/bifrost/core v1.14.1`, the same core module version used by upstream sibling plugins at the inspected commit. The compile-time interface assertion and plugin hook test check the adapter contract when run against that core API.
 
 ## Technologies Used
+For deployment prerequisites, health monitoring, Redis boundaries, troubleshooting, and rollout/rollback guidance, see the repository [operations runbook](../../RUNBOOK.md).
+
 
 - **Go:** version 1.27.3 for the plugin module.
 - **Bifrost:** `github.com/maximhq/bifrost/core` v1.14.1 and the `schemas.LLMPlugin` contract.
 - **State and product services:** bounded Go profiles plus optional Redis-backed tenant usage and audit storage; Redis identities use HMAC-derived references.
 - **Webhook delivery:** standard-library HTTPS client with HMAC signatures, host allowlisting, bounded timeouts, and no redirects.
 - **Observability:** Prometheus text exposition, optional OpenTelemetry API metrics, and privacy-safe OpenTelemetry tracing.
+- **Release metadata:** Validated semantic version, short Git commit, and optional RFC3339 build time in authenticated health/admin JSON; no build labels are added to metric series.
 - **Tests:** Go tests, race detector, vet, miniredis fixtures, a pinned-source Bifrost integration test, and an optional local k6 script.
 - **Optional AI review:** a host-supplied adapter using the Bifrost host's selected model; no provider-specific model client or API key is bundled in this module.
 - **Verification:** `go test`, `go test -race`, `go vet`, and a script that can test against the pinned Bifrost source checkout.
@@ -73,6 +76,7 @@ Findings are indicators for human review, not blocking decisions or an authoriza
 - Observe-only: hooks always pass the request and response through; no automatic block path exists.
 - There is no penalty box or automatic cooldown. A score above threshold is an advisory for human review, not a tenant or IP ban.
 - The plugin reads only the authenticated internal virtual-key ID from `BifrostContextKeyGovernanceVirtualKeyID`. It never falls back to `x-bf-vk` or another raw credential.
+- Bifrost or the host must verify user authentication and resolve identity before the hook. FraudGuard does not parse Authorization headers or accept tenant/subscription claims from an unverified JWT.
 - Optional cross-key correlation uses only the resolved `Grant.Identity().User().ID`, when Bifrost supplies one. It is separately HMACed with a namespace distinct from virtual-key IDs; it never reads IP headers or request-provided fingerprints. The signal is disabled by default.
 - The engine stores only a per-process HMAC digest of that internal ID as its map key. It stores bounded provider/model labels and token counts/timestamps for behavioral comparison; it does not store prompt, response, payload, key, request ID, or error text.
 - Prompt checks are disabled by default. When enabled, the pre-hook scans only user text in chat, text-completion, and Responses inputs, up to `MaxPromptScanBytes`; it ignores system/developer messages, media, tool data, and raw request bodies. It passes only a boolean match and byte count to the scorer, which does not retain either in profile history.
@@ -90,6 +94,7 @@ Findings are indicators for human review, not blocking decisions or an authoriza
 - Optional Redis product services keep tenant usage aggregates and audit records across restarts. They do **not** make detector behavior profiles shared across Bifrost replicas.
 - The optional product Redis client uses go-redis's bounded connection pool and bounded dial/read/write/pool waits. It is not queried for request behavior profiles or request velocity, and no sub-millisecond latency guarantee is made.
 - The optional product Redis client uses go-redis's bounded connection pool and bounded dial/read/write/pool waits. It is not queried for request behavior profiles or request velocity, and no sub-millisecond latency guarantee is made.
+- No Redis Lua velocity limiter is included. Redis is not used for request counts, behavioral profiles, throttling, or blocking.
 - Tenant identifiers are accepted only from the configured trusted host resolver; Redis keys and exports use HMAC-derived tenant references. Never resolve a tenant from an untrusted request header.
 - Virtual-key attribution reads only Bifrost's already-resolved internal context ID. This module does not parse raw key headers, Authorization values, JWT claims, or provider API credentials.
 - Usage metering and audit work runs on a bounded queue. Queue drops and service errors are counted in `ProductMetrics`; metering is therefore asynchronous, not a synchronous billing authorization check.
@@ -162,6 +167,22 @@ Supported detector overrides include:
 | `FRAUDGUARD_ENABLE_EXPIRED_KEY_SIGNAL`, `FRAUDGUARD_ENABLE_REVOKED_KEY_SIGNAL`, `FRAUDGUARD_ENABLE_EXPOSED_KEY_SIGNAL` | `true` or `false`; trusted host results are still required |
 
 `ConfigFromEnvironment` applies and validates startup overrides without constructing a plugin; `ValidateConfig` can validate a supplied config directly. Invalid explicit environment values return an error without echoing the raw value. The detector has no request-rate-limit setting or blocking mode; `MaxPaymentsPerWindow` is only an optional payment-behavior signal threshold. Since no request is blocked, there is no OpenAI-compatible blocked-request error response.
+
+### Startup security checks and release metadata
+
+`NewEngine` and `ConfigFromEnvironment` call `ValidateStartupSecurity` after configuration defaults/overrides are applied. `RunSecurityChecks` returns fixed status codes for config bounds, observe-only handling, trusted Bifrost identity, and bounded prompt inspection. It deliberately reports secret values as `not_inspected`: the helper does not enumerate environment variables, read secret contents, verify JWTs, or scan dependencies, and it is not a vulnerability scanner.
+
+The authenticated health and admin JSON responses include `BuildInfo`. The values are set at link time and sanitized; no environment variables or metric labels are used:
+
+```sh
+cd plugins/fraudguard
+VERSION=v1.2.3 \
+COMMIT="$(git rev-parse --short=12 HEAD)" \
+BUILD_TIME="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+  make build
+```
+
+Without a release tag or supplied build time, metadata defaults to `dev`/`unknown`. Hosts building Bifrost with the plugin as a dependency can set the same `-X github.com/maximhq/bifrost/plugins/fraudguard.BuildVersion=...`, `BuildCommit=...`, and `BuildTime=...` linker variables. No release tag is created by the module.
 
 For direct `New(config)` calls, the existing zero/negative-value defaulting behavior remains: 5 warmup requests, a 15-minute rolling window, 2-hour idle profile TTL, at most 10,000 profiles, 256 events per profile, alert threshold 60, 32 KiB prompt-size limit, 64 KiB prompt scan cap, 32 user-message context cap, 64 KiB context scan cap, and a 256-item finding callback queue. Prompt and context checks and payment signals default off. Payment windows/TTLs inherit the main window/profile TTL, payment subject/event bounds inherit the main profile/event bounds, the velocity signal threshold defaults to 10, and location warmup defaults to three trusted events. A direct `New` config threshold above 100 is clamped to 100; `NewFromEnvironment` rejects explicit out-of-range values. Warmup suppresses baseline-based behavioral anomaly signals until enough prior events exist.
 
@@ -270,7 +291,9 @@ Optional `FRAUDGUARD_TIER_POLICIES_JSON` is a JSON array of operator-owned polic
 ]
 ```
 
-When tier policies are enabled, the configured tenant must already have a tier assignment in Redis before plugin startup. `RedisProductStore.SetTenantTier` is the host-side provisioning hook. Cached policy applies alert thresholds, opted-in prompt/payment/key-status/cross-key signals, optional AI review, usage-export entitlement, webhook entitlement, and payment-velocity limits without blocking requests. The environment constructor warms its configured tenant at startup. A multi-tenant host should warm each trusted tenant with `ProductRuntime.ResolvePolicy` before serving traffic; a cold cache leaves plan-only signals disabled and increments `PolicyCacheMisses`. Policy refresh is asynchronous for inference requests; use the host's trusted plan service for authoritative subscription changes.
+When tier policies are enabled, the configured tenant must already have a tier assignment in Redis before plugin startup. `RedisProductStore.SetTenantTier` is the host-side provisioning hook. Cached policy applies alert thresholds, opted-in prompt/payment/key-status/cross-key signals, optional AI review, usage-export entitlement, webhook entitlement, and payment-velocity limits without blocking requests. The environment constructor warms its configured tenant at startup. A multi-tenant host should warm each trusted tenant with `ProductRuntime.ResolvePolicy` before serving traffic; a cold cache leaves plan-only signals disabled and increments `PolicyCacheMisses`. Policy refresh is asynchronous for inference requests; use the host's trusted plan service for authoritative subscription changes. The in-memory tier cache is TTL-based and LRU-evicted at a configurable maximum (`ProductServices.MaxCachedPolicies`, default 10,000, maximum 100,000).
+
+The custom prompt-rule set is compiled once and atomically replaced; it does not require a repeated lookup cache. No IP blocklist exists, so there is no IP-policy cache.
 
 Optional webhook settings are `FRAUDGUARD_WEBHOOK_URL`, `FRAUDGUARD_WEBHOOK_SIGNING_KEY` (at least 32 bytes), and `FRAUDGUARD_WEBHOOK_ALLOWED_HOSTS` (comma-separated exact hostnames). All three are required together. The endpoint must be HTTPS and allowlisted; redirects and private-network destinations are rejected by default. The environment webhook is scoped to the configured deployment tenant. Multi-tenant delivery requires a host-supplied `WebhookTargetResolver`.
 
@@ -332,7 +355,7 @@ fraudguard.SetTrustedCredentialStatus(ctx, fraudguard.CredentialStatus{
 
 ## Installation & Setup
 
-From the repository root, `make help` lists convenience commands such as `make fraudguard-test`, `make fraudguard-chaos`, `make fraudguard-demo`, `make fraudguard-compose-demo`, and `make fraudguard-load-test`. The Compose walkthrough requires Docker and network access to fetch the pinned Bifrost checkout and images.
+From the repository root, `make help` lists convenience commands such as `make fraudguard-test`, `make fraudguard-chaos`, `make fraudguard-demo`, `make fraudguard-compose-demo`, and `make fraudguard-load-test`. From this module directory, `make setup` checks Go and runs local verification without creating `.env` files or pulling containers. The explicit `bash scripts/setup_dev.sh --compose-demo` option runs the pinned disposable Bifrost/Redis/mock-provider smoke test and requires Docker plus network access.
 
 ### Run the module locally
 

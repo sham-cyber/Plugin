@@ -265,6 +265,9 @@ func NewEngine(config Config) (*Engine, error) {
 		return nil, errors.New("fraudguard: custom prompt rules enabled without a rule set")
 	}
 	config = withDefaults(config)
+	if err := ValidateStartupSecurity(config); err != nil {
+		return nil, err
+	}
 	if config.EnableAIAnalysis && config.AIAnalyzer == nil {
 		return nil, errors.New("fraudguard: AI analysis enabled without a host model adapter")
 	}

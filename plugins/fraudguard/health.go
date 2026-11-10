@@ -35,15 +35,17 @@ type HealthOptions struct {
 // stable codes; provider errors, Redis URLs, tenant IDs, keys, and prompts are
 // never included.
 type HealthStatus struct {
-	SchemaVersion      string    `json:"schema_version"`
-	Status             string    `json:"status"`
-	Ready              bool      `json:"ready"`
-	InferenceAvailable bool      `json:"inference_available"`
-	RedisStatus        string    `json:"redis_status"`
-	HeapAllocBytes     uint64    `json:"heap_alloc_bytes"`
-	MaxHeapAllocBytes  uint64    `json:"max_heap_alloc_bytes,omitempty"`
-	Reasons            []string  `json:"reasons,omitempty"`
-	CheckedAt          time.Time `json:"checked_at"`
+	SchemaVersion      string               `json:"schema_version"`
+	Status             string               `json:"status"`
+	Ready              bool                 `json:"ready"`
+	InferenceAvailable bool                 `json:"inference_available"`
+	Build              BuildInfo            `json:"build"`
+	Security           *SecurityCheckReport `json:"security,omitempty"`
+	RedisStatus        string               `json:"redis_status"`
+	HeapAllocBytes     uint64               `json:"heap_alloc_bytes"`
+	MaxHeapAllocBytes  uint64               `json:"max_heap_alloc_bytes,omitempty"`
+	Reasons            []string             `json:"reasons,omitempty"`
+	CheckedAt          time.Time            `json:"checked_at"`
 }
 
 // CheckHealth performs operator-only checks outside the inference path.
@@ -53,6 +55,7 @@ func (p *Plugin) CheckHealth(ctx context.Context, options HealthOptions) HealthS
 	status := HealthStatus{
 		SchemaVersion:     "fraudguard.health.v1",
 		Status:            "unavailable",
+		Build:             BuildMetadata(),
 		RedisStatus:       "not_configured",
 		MaxHeapAllocBytes: options.MaxHeapAllocBytes,
 		CheckedAt:         time.Now().UTC(),
@@ -64,6 +67,8 @@ func (p *Plugin) CheckHealth(ctx context.Context, options HealthOptions) HealthS
 
 	status.InferenceAvailable = true
 	status.Ready = true
+	securityReport := RunSecurityChecks(p.engine.configSnapshot())
+	status.Security = &securityReport
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	status.HeapAllocBytes = memStats.HeapAlloc
@@ -153,9 +158,10 @@ func NewProbeHandler(plugin *Plugin, authorize AdminAuthorizer, options HealthOp
 		switch r.URL.Path {
 		case "/livez":
 			_ = json.NewEncoder(w).Encode(struct {
-				Status             string `json:"status"`
-				InferenceAvailable bool   `json:"inference_available"`
-			}{Status: "ok", InferenceAvailable: true})
+				Status             string    `json:"status"`
+				InferenceAvailable bool      `json:"inference_available"`
+				Build              BuildInfo `json:"build"`
+			}{Status: "ok", InferenceAvailable: true, Build: BuildMetadata()})
 		case "/healthz", "/readyz":
 			status := plugin.CheckHealth(r.Context(), options)
 			if r.URL.Path == "/readyz" && !status.Ready {

@@ -31,6 +31,7 @@ type ProductServices struct {
 	Workers        int
 	Timeout        time.Duration
 	PolicyCacheTTL time.Duration
+	MaxCachedPolicies int
 }
 
 type ProductMetrics struct {
@@ -52,7 +53,7 @@ type ProductRuntime struct {
 	mu       sync.RWMutex
 	closed   bool
 	wg       sync.WaitGroup
-	policies map[string]cachedPolicy
+	policyCache *tierPolicyLRU
 
 	queued        atomic.Uint64
 	dropped       atomic.Uint64
@@ -115,10 +116,20 @@ func NewProductRuntime(services ProductServices) (*ProductRuntime, error) {
 	if services.PolicyCacheTTL > 10*time.Minute {
 		return nil, errors.New("fraudguard: policy cache TTL cannot exceed 10 minutes")
 	}
+	if services.MaxCachedPolicies <= 0 {
+		services.MaxCachedPolicies = defaultMaxCachedPolicies
+	}
+	if services.MaxCachedPolicies > maxCachedPolicies {
+		return nil, errors.New("fraudguard: policy cache capacity cannot exceed 100000")
+	}
+	policyCache, err := newTierPolicyLRU(services.MaxCachedPolicies)
+	if err != nil {
+		return nil, err
+	}
 	runtime := &ProductRuntime{
 		services: services,
 		queue:    make(chan productEvent, services.QueueSize),
-		policies: make(map[string]cachedPolicy),
+		policyCache: policyCache,
 	}
 	for range services.Workers {
 		runtime.wg.Add(1)
@@ -135,15 +146,8 @@ func (r *ProductRuntime) CachedPolicy(tenantID string) (TierPolicy, bool) {
 		return TierPolicy{}, false
 	}
 	key := policyCacheKey(tenantID)
-	r.mu.RLock()
-	entry, ok := r.policies[key]
-	r.mu.RUnlock()
-	if !ok || time.Now().After(entry.expiresAt) {
-		if ok {
-			r.mu.Lock()
-			delete(r.policies, key)
-			r.mu.Unlock()
-		}
+	entry, ok := r.policyCache.get(key, time.Now())
+	if !ok {
 		return TierPolicy{}, false
 	}
 	return entry.policy, true
@@ -184,11 +188,9 @@ func (r *ProductRuntime) ResolvePolicy(ctx context.Context, tenantID string) (Ti
 	if err != nil {
 		return TierPolicy{}, false, err
 	}
-	r.mu.Lock()
-	r.policies[policyCacheKey(tenantID)] = cachedPolicy{
+	r.policyCache.set(policyCacheKey(tenantID), cachedPolicy{
 		policy: policy, expiresAt: time.Now().Add(r.services.PolicyCacheTTL),
-	}
-	r.mu.Unlock()
+	})
 	return policy, true, nil
 }
 

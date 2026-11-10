@@ -170,9 +170,9 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - Root Compose configuration, both launcher shell syntaxes, three JSON configs, and `git diff --check` passed. The full Bifrost image build, `docker compose up`, and `demo_walkthrough.sh --compose` were not run. No live metrics endpoint is queried by default; the walkthrough only calls the admin CLI if an authenticated host URL is supplied.
 - No upstream commit or user checkout was changed and no Git push was made. The demo asserts pass-through rather than a block; all signals remain advisory.
 
-## 11. CI, health probes, and submission package (2026-11-10)
+## 11. CI draft, health probes, and submission package (2026-11-10)
 
-- Added `.github/workflows/fraud-plugin-ci.yml` for pull requests and manual dispatch. It runs Go build/tests, race detector, `go vet`, benchmarks, checks the pinned Bifrost API in a disposable checkout, applies the integration overlay only there, and builds the Compose gateway and mock-provider images. The workflow has not yet run on GitHub.
+- Drafted `.github/workflows/fraud-plugin-ci.yml` for pull requests and manual dispatch. The workflow file is being kept pending and is not included in this push; it has not run on GitHub.
 - Added `RedisProductStore.HealthCheck` and `CheckHealth`. Health probes use a bounded Redis ping and report stable status codes only. By default, an optional Redis outage marks product health degraded but leaves inference readiness true. Hosts may opt to make Redis or a process-wide heap threshold affect readiness.
 - Added authenticated `NewProbeHandler` routes for `/livez`, `/healthz`, and `/readyz`. These routes are not automatically mounted in Bifrost; the host must attach them to a private listener and provide authorization. The memory measure is process-wide, not FraudGuard-only.
 - Added unit tests for healthy Redis ping, optional versus required Redis readiness, heap threshold behavior, authorization, and prompt-safe status output. `make verify` passed after these changes: build, tests, race detector, vet, and synthetic demo.
@@ -200,3 +200,28 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - `go test ./...`, `go test -race ./...`, `go vet ./...`, root build/demo/chaos/help targets, and `git diff --check` passed after these changes.
 - The tests do not establish production performance, do not exercise a real Bifrost inbound gateway or Redis Cluster, and do not validate a live OpenTelemetry exporter. The Compose walkthrough and k6 traffic run were not performed.
 - No upstream files were changed and no Git push was made. Rule matches remain advisory; there are no blocked-request or penalty-box actions.
+
+## 14. Safe identity, startup checks, and build metadata (2026-11-10)
+
+- No JWT parser or claim-to-tenant injection was added. Bifrost/host authentication remains responsible for verifying credentials; FraudGuard uses only Bifrost's resolved internal virtual-key context.
+- No Redis Lua request-velocity limiter was added because it would introduce request throttling into an explicitly observe-only detector. Redis remains limited to optional product services.
+- Added `RunSecurityChecks` and `ValidateStartupSecurity` for bounded configuration checks and fixed, aggregate status codes. They do not enumerate environment variables, inspect secret contents, verify JWTs, or scan dependencies; the report explicitly marks secrets as not inspected.
+- Added sanitized semantic version, commit hash, and optional build-time metadata to authenticated health/admin JSON. The module Makefile supports linker flags; metadata is not added to metrics labels and no release tag was created.
+- Verification after these changes: `go test ./...`, `go test -race ./...`, `go vet ./...`, and the module `make build` passed.
+- These checks are not a vulnerability scan or production readiness certification. Full inbound gateway testing, external dependency scanning, and production deployment validation remain unperformed.
+
+## 15. Sandbox, setup automation, bounded cache, and operations runbook (2026-11-10)
+
+- Step 47's safe observe-only sandbox behavior is already covered by `main_test.go`: a real Bifrost core plugin pipeline sends a prompt-risk request to an ephemeral HTTP mock provider and verifies the request still reaches it. The pinned Compose smoke script also exercises the inbound HTTP gateway when explicitly run. No rate-limit or block response was added.
+- Added `scripts/setup_dev.sh`. Its default path checks the module Go toolchain and runs build/tests/race/vet/demo without creating environment files or pulling containers. `--compose-demo` explicitly runs the disposable pinned-source Docker smoke test.
+- Added a bounded, concurrent-safe TTL/LRU cache for trusted tenant tier policies. Capacity defaults to 10,000 and is capped at 100,000. Custom prompt rules remain atomically compiled; no IP blocklist or IP-policy cache was introduced.
+- Added root `RUNBOOK.md` covering setup, integration, secret handling, Redis limits, cache behavior, monitoring, troubleshooting, and rollout/rollback. It states that production behavior and Redis Cluster support are not validated.
+- `bash plugins/fraudguard/scripts/setup_dev.sh` passed using Go 1.27.3: build, tests, race detector, vet, and synthetic demo all passed. The Compose smoke test was not run.
+- No upstream checkout was changed and no Git push was made for this batch.
+
+## 16. Usage export and plan tiers (2026-11-10)
+
+- Steps 51–52 map to existing modules, so no duplicate `billing_sync.go` or `tier_enforcer.go` was added. The repository path is `plugins/fraudguard`, not the prompt's stale `plugins/behavioral_fraud`.
+- `BuildUsageExport` / `ExportUsageJSON` provide a versioned, amount-free monthly payload with an HMAC tenant reference, request/token/fraud-check/finding/alert totals, and optional plan evaluation. It is not an invoice, payment request, or automatic billing sync. No blocked-attempt field is emitted because FraudGuard never blocks.
+- Free/Pro/Enterprise plans come from the trusted host resolver and plan catalog, not request headers. Usage warnings/overages are informational; tier entitlements can enable signals and exports, but no tier throttles requests or blocks high-risk prompts.
+- Focused usage-export privacy and observe-only tier-policy tests passed. No new behavior or production billing integration was introduced.

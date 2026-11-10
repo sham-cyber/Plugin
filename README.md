@@ -12,6 +12,8 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 
 [Read the contribution guide](CONTRIBUTING.md)
 
+[Open the operations runbook](RUNBOOK.md)
+
 ## Verification Report — What Was Checked and What It Proves
 
 This section is the project's evidence summary. It distinguishes what was checked from what remains unverified.
@@ -109,6 +111,7 @@ This changes only the chosen local checkout; it does not commit or push to upstr
 - A Go adapter implements Bifrost's `schemas.LLMPlugin` hooks. It reads the authenticated internal virtual-key ID supplied by Bifrost; it does not use IP headers as identity.
 - A bounded, process-local rolling profile compares model/provider use, request timing, token volume, and outcomes after warmup.
 - Explainable signals produce a deterministic 0–100 score and threshold alert. The plugin is observe-only: it does not block or alter requests.
+- Startup configuration checks and validated build metadata are exposed through authenticated health/admin JSON; the checks never read or emit secret values.
 - Optional prompt checks inspect only user text transiently, use a bounded scan, and default off. Findings contain only fixed signal names and reasons, never prompt text.
 - Optional trusted operator-managed RE2 rules can be replaced atomically in memory; matches produce a fixed advisory signal and are never written to Redis or used to block.
 - Optional context inspection scans bounded user-role turns in the current request for staged override, sensitive-data disclosure, and schema-override phrases. It is heuristic, opt-in, transient, and never blocks.

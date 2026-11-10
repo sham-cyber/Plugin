@@ -16,6 +16,8 @@ type AdminStatus struct {
 	SchemaVersion      string               `json:"schema_version"`
 	Plugin             string               `json:"plugin"`
 	InferenceAvailable bool                 `json:"inference_available"`
+	Build              BuildInfo            `json:"build"`
+	Security           SecurityCheckReport  `json:"security"`
 	Engine             Metrics              `json:"engine"`
 	Telemetry          TelemetrySnapshot    `json:"telemetry"`
 	Product            ProductMetrics       `json:"product"`
@@ -93,13 +95,15 @@ func NewAdminHandler(plugin *Plugin, authorize AdminAuthorizer) (http.Handler, e
 				status = "degraded"
 			}
 			_ = json.NewEncoder(w).Encode(struct {
-				Status             string `json:"status"`
-				InferenceAvailable bool   `json:"inference_available"`
-				ProductDegraded    bool   `json:"product_degraded"`
+				Status             string    `json:"status"`
+				InferenceAvailable bool      `json:"inference_available"`
+				ProductDegraded    bool      `json:"product_degraded"`
+				Build              BuildInfo `json:"build"`
 			}{
 				Status:             status,
 				InferenceAvailable: true,
 				ProductDegraded:    degraded,
+				Build:              BuildMetadata(),
 			})
 		default:
 			http.NotFound(w, r)
@@ -112,6 +116,8 @@ func adminStatusSnapshot(plugin *Plugin) AdminStatus {
 		SchemaVersion:      "fraudguard.admin.v1",
 		Plugin:             PluginName,
 		InferenceAvailable: true,
+		Build:              BuildMetadata(),
+		Security:           RunSecurityChecks(plugin.engine.configSnapshot()),
 		Engine:             plugin.engine.Metrics(),
 		Telemetry:          plugin.TelemetrySnapshot(),
 		Product:            plugin.ProductMetrics(),

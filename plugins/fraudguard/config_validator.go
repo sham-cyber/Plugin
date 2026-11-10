@@ -183,7 +183,7 @@ func configFromLookup(base Config, lookup func(string) (string, bool)) (Config, 
 		override.set(parsed)
 	}
 
-	if err := ValidateConfig(base); err != nil {
+	if err := ValidateStartupSecurity(base); err != nil {
 		return Config{}, err
 	}
 	return base, nil

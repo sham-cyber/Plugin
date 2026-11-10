@@ -9,7 +9,14 @@ FraudGuard is an experimental companion Go module for Bifrost. Contributions sho
 - Attribute a request only from Bifrost's resolved internal virtual-key context or a trusted host callback. Do not treat IP headers, user-agent strings, JWT claims supplied by the request, or caller-controlled tenant headers as identity.
 - Keep prompt and context inspection opt-in, bounded, and transient. New heuristic patterns must use bounded input and include false-positive tests.
 - Use only trusted host sources for payment, credential-status, and tenant data. Redis is for optional product metering/audit services, not behavioral profiles or remotely supplied rules.
+- Do not parse caller-supplied JWT claims to establish tenant identity, and do not add a Redis Lua request limiter. Bifrost/host authentication owns identity resolution; request handling stays observe-only.
 - Do not claim production performance, fraud prevention, or upstream compatibility beyond the tests actually run.
+
+## Startup checks and release metadata
+
+`ValidateStartupSecurity` checks the existing bounded configuration rules. `RunSecurityChecks` reports fixed configuration/architecture codes only; it does not read environment secret values, verify JWT signatures, or perform a dependency vulnerability scan. Run an approved dependency scanner separately when required.
+
+Authenticated health/admin JSON includes validated build metadata. For module builds, supply `VERSION`, `COMMIT`, and `BUILD_TIME` to `make build`; see the build example in `plugins/fraudguard/README.md`. Build metadata is omitted from metric labels to avoid high-cardinality series.
 
 ## Adding an advisory prompt rule
 
@@ -22,6 +29,7 @@ Updates are performed by trusted host code through `ReplaceJSON`; the module pro
 From the repository root:
 
 ```sh
+bash plugins/fraudguard/scripts/setup_dev.sh
 make fraudguard-build
 make fraudguard-test
 make fraudguard-race
@@ -29,6 +37,8 @@ make fraudguard-vet
 make fraudguard-chaos
 make fraudguard-demo
 ```
+
+The setup script's default mode does not create local environment files or start containers. Use `bash plugins/fraudguard/scripts/setup_dev.sh --compose-demo` only when you intentionally want to fetch and run the disposable pinned Bifrost/Redis/mock-provider stack.
 
 The chaos tests use miniredis and in-process fakes. They do not prove behavior under production Redis Cluster, real network faults, or production traffic.
 

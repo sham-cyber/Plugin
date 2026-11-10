@@ -46,6 +46,10 @@ func TestAdminDashboardIsAuthenticatedAndAggregateOnly(t *testing.T) {
 		dashboard.SchemaVersion != "fraudguard.admin.v1" || dashboard.GeneratedAt.IsZero() {
 		t.Fatalf("unexpected dashboard snapshot: %+v", dashboard)
 	}
+	if dashboard.Build.Version == "" || dashboard.Build.Commit == "" ||
+		dashboard.Security.Status != "configuration_valid" {
+		t.Fatalf("dashboard is missing release/security status: %+v", dashboard)
+	}
 	if time.Since(dashboard.GeneratedAt) > time.Minute {
 		t.Fatalf("dashboard timestamp is not recent: %s", dashboard.GeneratedAt)
 	}
