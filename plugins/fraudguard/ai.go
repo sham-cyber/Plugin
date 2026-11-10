@@ -100,9 +100,9 @@ func (e *Engine) runAIWorker() {
 	defer e.aiWG.Done()
 	for job := range e.aiQueue {
 		ctx, cancel := context.WithTimeout(context.Background(), e.cfg.AIAnalysisTimeout)
-		result, err := e.cfg.AIAnalyzer.Analyze(ctx, job.input)
+		result, err, panicked := analyzeSafely(e.cfg.AIAnalyzer, ctx, job.input)
 		cancel()
-		if err != nil {
+		if err != nil || panicked {
 			e.recordAIReviewMetric(func(m *Metrics) { m.AIReviewsFailed++ })
 			continue
 		}
@@ -111,12 +111,37 @@ func (e *Engine) runAIWorker() {
 			e.recordAIReviewMetric(func(m *Metrics) { m.AIReviewsFailed++ })
 			continue
 		}
-		e.recordAIReviewMetric(func(m *Metrics) { m.AIReviewsCompleted++ })
-		e.cfg.OnAIReview(AIReviewEvent{
+		if reviewCallbackPanicked(e.cfg.OnAIReview, AIReviewEvent{
 			Finding:  job.finding,
 			Analysis: result,
-		})
+		}) {
+			e.recordAIReviewMetric(func(m *Metrics) { m.AIReviewsFailed++ })
+			continue
+		}
+		e.recordAIReviewMetric(func(m *Metrics) { m.AIReviewsCompleted++ })
 	}
+}
+
+func analyzeSafely(analyzer AIAnalyzer, ctx context.Context, input AIAnalysisInput) (result AIAnalysisResult, err error, panicked bool) {
+	defer func() {
+		if recover() != nil {
+			result = AIAnalysisResult{}
+			err = nil
+			panicked = true
+		}
+	}()
+	result, err = analyzer.Analyze(ctx, input)
+	return result, err, false
+}
+
+func reviewCallbackPanicked(callback func(AIReviewEvent), event AIReviewEvent) (panicked bool) {
+	defer func() {
+		if recover() != nil {
+			panicked = true
+		}
+	}()
+	callback(event)
+	return false
 }
 
 func (e *Engine) recordAIReviewMetric(update func(*Metrics)) {
@@ -125,19 +150,24 @@ func (e *Engine) recordAIReviewMetric(update func(*Metrics)) {
 	e.mu.Unlock()
 }
 
-// Close stops accepting AI review work, drains the bounded queue, and waits for
-// adapters to finish. Host adapters must honor the timeout context.
+// Close stops accepting callbacks, drains bounded queues, and waits for workers.
+// Host model adapters must honor their timeout; finding sinks should return promptly.
 func (e *Engine) Close() error {
-	if e.aiQueue == nil {
-		return nil
+	e.findingMu.Lock()
+	if e.findingQueue != nil && !e.findingClosed {
+		e.findingClosed = true
+		close(e.findingQueue)
 	}
+	e.findingMu.Unlock()
+
 	e.aiMu.Lock()
-	if !e.aiClosed {
+	if e.aiQueue != nil && !e.aiClosed {
 		e.aiClosed = true
 		close(e.aiQueue)
 	}
 	e.aiMu.Unlock()
 	e.aiWG.Wait()
+	e.findingWG.Wait()
 	return nil
 }
 

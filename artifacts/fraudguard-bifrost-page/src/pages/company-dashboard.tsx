@@ -63,16 +63,16 @@ export default function CompanyDashboard() {
           <span className="dashboard-fixed-tag">FIXED DEMO</span>
         </section>
 
-        <section className="dashboard-subscription" aria-label="Simulated subscription" data-testid="card-demo-subscription">
+        <section className="dashboard-subscription" aria-label="Free hackathon demo and proposed commercial routes" data-testid="card-demo-subscription">
           <div className="subscription-mark"><Check size={16} /></div>
           <div className="subscription-copy">
-            <span className="dashboard-index">SUBSCRIBER EXPERIENCE · SIMULATED</span>
-            <h2>Display filters + alert preferences</h2>
-            <p>This prototype illustrates a company plan. Nothing is actually subscribed, billed, or connected.</p>
+            <span className="dashboard-index">FREE HACKATHON EDITION · DEMO</span>
+            <h2>Open-source core · no license fee</h2>
+            <p>This build is free to review and test. AshaRatna direct subscriptions and a possible Bifrost channel are proposals only; no paid service is active.</p>
           </div>
           <div className="subscription-state" data-testid="status-demo-subscription">
-            <span>ACTIVE IN SIMULATION</span>
-            <strong>Not billed · not actually subscribed</strong>
+            <span>FREE DEMO</span>
+            <strong>No billing · no Bifrost deal</strong>
           </div>
         </section>
 

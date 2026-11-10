@@ -7,4 +7,4 @@ The current Replit shell exposes Go 1.26.8 while the pinned Bifrost plugin modul
 
 **Why:** Replit's default `GOSUMDB=off` prevents Go from verifying and downloading the newer toolchain automatically.
 
-**How to apply:** When validating Bifrost modules that declare Go 1.27.3, set `GOSUMDB=sum.golang.org` for Go commands and resolve `gofmt` from the selected toolchain's `GOROOT`.
+**How to apply:** When validating Bifrost modules that declare Go 1.27.3, set `GOSUMDB=sum.golang.org` for Go commands and resolve `gofmt` from the selected toolchain's `GOROOT`. Go subprocesses launched by the Node API must also override `GOSUMDB=off` explicitly so toolchain verification can succeed.

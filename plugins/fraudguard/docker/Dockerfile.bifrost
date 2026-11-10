@@ -1,0 +1,59 @@
+# This build follows the pinned Bifrost transports/Dockerfile but also copies
+# the local module replacements required by the FraudGuard integration overlay.
+FROM node:25-alpine3.23@sha256:bdf2cca6fe3dabd014ea60163eca3f0f7015fbd5c7ee1b0e9ccb4ced6eb02ef4 AS ui-builder
+WORKDIR /app
+RUN apk upgrade --no-cache
+COPY ui/package*.json ./
+RUN npm ci
+COPY ui/ ./
+RUN npm run build-enterprise
+
+FROM golang:1.27.3-alpine3.24@sha256:f2c872bcee949b7be9c490efd02b48a8a2fbf947cdf533f1c58525ec9d8170fd AS builder
+WORKDIR /app
+RUN apk upgrade --no-cache && apk add --no-cache gcc musl-dev sqlite-dev binutils binutils-gold
+ENV CGO_ENABLED=1 GOOS=linux GOWORK=off
+
+# The integration overlay adds local sibling-module replacements to
+# transports/go.mod. Place each module at the matching ../ path from /app.
+COPY core/ /core/
+COPY framework/ /framework/
+COPY plugins/compat/ /plugins/compat/
+COPY plugins/governance/ /plugins/governance/
+COPY plugins/logging/ /plugins/logging/
+COPY plugins/maxim/ /plugins/maxim/
+COPY plugins/modelcatalogresolver/ /plugins/modelcatalogresolver/
+COPY plugins/otel/ /plugins/otel/
+COPY plugins/prompts/ /plugins/prompts/
+COPY plugins/routing/ /plugins/routing/
+COPY plugins/semanticcache/ /plugins/semanticcache/
+COPY plugins/telemetry/ /plugins/telemetry/
+COPY plugins/fraudguard/ /plugins/fraudguard/
+COPY transports/go.mod transports/go.sum ./
+RUN GOSUMDB=sum.golang.org go mod download
+COPY transports/ ./
+COPY --from=ui-builder /app/out ./bifrost-http/ui
+
+ARG VERSION=fraudguard-local
+RUN go build \
+  -ldflags="-w -s -X main.Version=v${VERSION} -extldflags '-static'" \
+  -a -trimpath \
+  -tags "sqlite_static" \
+  -o /app/main \
+  ./bifrost-http
+
+FROM alpine:3.23.5@sha256:fd791d74b68913cbb027c6546007b3f0d3bc45125f797758156952bc2d6daf40
+WORKDIR /app
+RUN apk upgrade --no-cache && apk add --no-cache musl libgcc ca-certificates zlib
+COPY --from=builder /app/main .
+COPY --from=builder /app/docker-entrypoint.sh .
+ENV APP_PORT=8080 APP_HOST=0.0.0.0 LOG_LEVEL=info LOG_STYLE=json APP_DIR=/app/data
+RUN mkdir -p "$APP_DIR/logs" && adduser -D -s /bin/sh appuser && \
+  chown -R appuser:appuser /app && chown -R appuser:0 "$APP_DIR" && \
+  chmod -R g=rwX "$APP_DIR" && chmod +x /app/docker-entrypoint.sh
+USER 1000:0
+VOLUME ["/app/data"]
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=10s --start-period=20s --retries=3 \
+  CMD wget -q -O /dev/null http://127.0.0.1:${APP_PORT}/health || exit 1
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["/app/main"]

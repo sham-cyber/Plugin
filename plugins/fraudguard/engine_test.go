@@ -170,25 +170,30 @@ func TestProfileExpirationAndMemoryBound(t *testing.T) {
 func TestFindingsNeverContainPromptOrKey(t *testing.T) {
 	const prompt = "PRIVATE_PROMPT_should_never_appear"
 	const secretKey = "PRIVATE_VIRTUAL_KEY_should_never_appear"
-	var findings []Finding
+	findings := make(chan Finding, 8)
 	engine := testEngine(t, Config{
 		WarmupRequests:             1,
 		EnableCrossKeyCorrelation:  true,
 		MaxDistinctKeysPerIdentity: 1,
-		OnFinding:                  func(f Finding) { findings = append(findings, f) },
+		OnFinding:                  func(f Finding) { findings <- f },
 	})
+	defer engine.Close()
 	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	completedRequestWithCohort(engine, secretKey, "PRIVATE_COHORT_should_never_appear", "provider-a", "model-a", base, 10, 10, false)
 	completedRequestWithCohort(engine, secretKey+"-second", "PRIVATE_COHORT_should_never_appear", "provider-b", "model-b", base.Add(time.Second), 10, 10, false)
-	encoded := fmt.Sprintf("%+v", findings)
+	var finding Finding
+	select {
+	case finding = <-findings:
+	case <-time.After(time.Second):
+		t.Fatal("finding callback was not delivered")
+	}
+	encoded := fmt.Sprintf("%+v", finding)
 	if strings.Contains(encoded, prompt) || strings.Contains(encoded, secretKey) || strings.Contains(encoded, "PRIVATE_COHORT_should_never_appear") {
 		t.Fatalf("finding leaked protected values: %s", encoded)
 	}
-	for _, finding := range findings {
-		for _, signal := range finding.Signals {
-			if strings.Contains(signal.Reason, "provider-b") || strings.Contains(signal.Reason, "model-b") {
-				t.Fatalf("finding leaked a raw model/provider label: %+v", signal)
-			}
+	for _, signal := range finding.Signals {
+		if strings.Contains(signal.Reason, "provider-b") || strings.Contains(signal.Reason, "model-b") {
+			t.Fatalf("finding leaked a raw model/provider label: %+v", signal)
 		}
 	}
 	for cohortID := range engine.cohorts {
@@ -454,23 +459,28 @@ func TestPaymentStateIsBoundedExpiresAndHashesInputs(t *testing.T) {
 func TestPaymentFindingsDoNotLeakSubjectOrCountry(t *testing.T) {
 	base := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
 	const subject = "PRIVATE_PAYMENT_SUBJECT_VALUE"
-	findings := make([]Finding, 0)
+	findings := make(chan Finding, 4)
 	engine := testEngine(t, Config{
 		EnablePaymentVelocity:       true,
 		EnablePaymentLocation:       true,
 		MaxPaymentsPerWindow:        1,
 		PaymentLocationWarmupEvents: 1,
-		OnFinding:                   func(f Finding) { findings = append(findings, f) },
+		OnFinding:                   func(f Finding) { findings <- f },
 	})
+	defer engine.Close()
 	engine.RecordPayment(PaymentEvent{SubjectID: subject, CountryCode: "US", Timestamp: base})
 	engine.RecordPayment(PaymentEvent{SubjectID: subject, CountryCode: "CA", Timestamp: base.Add(time.Second)})
-	for _, finding := range findings {
-		for _, signal := range finding.Signals {
-			if strings.Contains(signal.Reason, subject) ||
-				strings.Contains(signal.Reason, "US") ||
-				strings.Contains(signal.Reason, "CA") {
-				t.Fatalf("payment finding leaked identifying input: %+v", signal)
-			}
+	var finding Finding
+	select {
+	case finding = <-findings:
+	case <-time.After(time.Second):
+		t.Fatal("payment finding callback was not delivered")
+	}
+	for _, signal := range finding.Signals {
+		if strings.Contains(signal.Reason, subject) ||
+			strings.Contains(signal.Reason, "US") ||
+			strings.Contains(signal.Reason, "CA") {
+			t.Fatalf("payment finding leaked identifying input: %+v", signal)
 		}
 	}
 }
@@ -510,4 +520,54 @@ func containsSignal(finding Finding, name string) bool {
 		}
 	}
 	return false
+}
+
+func TestTrustedTierThresholdOverridesAlertClassification(t *testing.T) {
+	engine := testEngine(t, Config{EnablePromptOverrideSignals: true, AlertThreshold: 80})
+	defer engine.Close()
+
+	threshold := 30
+	handle, start := engine.Start(Request{
+		VirtualKeyID:           "internal-key-row",
+		PromptOverrideDetected: true,
+		AlertThresholdOverride: &threshold,
+	})
+	if start.Finding.Score != 40 || start.Finding.Threshold != threshold || !start.Finding.Alert {
+		t.Fatalf("trusted tenant threshold was not applied: %+v", start.Finding)
+	}
+	completed := engine.Complete(handle, Completion{})
+	if completed.Finding.Threshold != threshold {
+		t.Fatalf("completion reverted to the global threshold: %+v", completed.Finding)
+	}
+}
+
+func TestTrustedTierPaymentVelocityOverrideIsStillObserveOnly(t *testing.T) {
+	engine := testEngine(t, Config{
+		EnablePaymentVelocity: true,
+		MaxPaymentsPerWindow:  10,
+		AlertThreshold:        90,
+	})
+	defer engine.Close()
+
+	now := time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC)
+	limit, threshold := 1, 50
+	first := engine.RecordPayment(PaymentEvent{
+		SubjectID:                    "hashed-subject-source",
+		Timestamp:                    now,
+		MaxPaymentsPerWindowOverride: limit,
+		AlertThresholdOverride:       &threshold,
+	})
+	second := engine.RecordPayment(PaymentEvent{
+		SubjectID:                    "hashed-subject-source",
+		Timestamp:                    now.Add(time.Second),
+		MaxPaymentsPerWindowOverride: limit,
+		AlertThresholdOverride:       &threshold,
+	})
+	if len(first.Finding.Signals) != 0 {
+		t.Fatalf("first event should be below the tenant policy limit: %+v", first.Finding)
+	}
+	if !containsSignal(second.Finding, "payment_velocity") ||
+		second.Finding.Threshold != threshold || !second.Finding.Alert {
+		t.Fatalf("tenant payment policy was not applied: %+v", second.Finding)
+	}
 }

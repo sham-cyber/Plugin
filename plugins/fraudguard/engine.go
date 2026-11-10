@@ -53,6 +53,24 @@ type Config struct {
 	EnableExpiredKeySignal bool
 	EnableRevokedKeySignal bool
 	EnableExposedKeySignal bool
+	// Prompt checks inspect user text transiently and default off. Only boolean
+	// indicators and the byte count are passed to Start; raw text is never stored.
+	EnablePromptOverrideSignals bool
+	EnablePromptLengthSignal    bool
+	MaxPromptBytes              int
+	MaxPromptScanBytes          int
+	// Custom prompt rules are trusted, operator-supplied RE2 expressions.
+	// Matches add an advisory signal only and default off.
+	EnableCustomPromptRules bool
+	CustomPromptRules       *CustomPromptRules
+	// EnableContextGuard opts in to bounded, transient inspection of user turns.
+	// The guard returns only fixed signal booleans and never stores message text.
+	EnableContextGuard  bool
+	MaxContextMessages  int
+	MaxContextScanBytes int
+	// ThreatIntelFeed is a trusted, in-memory indicator set. Matches only add
+	// an advisory signal and never block a request.
+	ThreatIntelFeed *ThreatIntelFeed
 	// AlertThreshold is inclusive; findings below it remain observable but are not alerts.
 	AlertThreshold int
 	// AI review is opt-in. The host supplies an adapter backed by a separately
@@ -67,8 +85,11 @@ type Config struct {
 	// ExemptVirtualKeyIDs contains resolved internal IDs, never credential values.
 	// IDs are immediately HMACed and are not stored in clear text.
 	ExemptVirtualKeyIDs []string
-	// OnFinding receives structured, payload-free findings. It is invoked outside the lock.
+	// OnFinding receives structured, payload-free findings through a bounded
+	// asynchronous queue. Queue overflow drops the callback event and increments a metric.
 	OnFinding func(Finding)
+	// FindingCallbackQueueSize bounds pending audit callbacks (default 256, maximum 4096).
+	FindingCallbackQueueSize int
 }
 
 // Signal is a deterministic, explainable component of a risk score.
@@ -99,6 +120,20 @@ type Request struct {
 	Provider  string
 	Model     string
 	Timestamp time.Time
+	// Prompt indicators are transient hook results. The engine never stores them
+	// in profile history; callers must not put raw prompt text here.
+	PromptOverrideDetected      bool
+	CustomPromptRuleMatched     bool
+	PromptBytes                 int64
+	ContextProgressiveJailbreak bool
+	ContextDataExfiltration     bool
+	ContextSchemaManipulation   bool
+	// AlertThresholdOverride is supplied only by a trusted tenant-plan resolver.
+	// It changes alert classification, never the score or request handling.
+	AlertThresholdOverride *int
+	// AIReviewOverride can disable optional advisory review for a plan. It can
+	// never enable AI review when the engine's operator configuration disables it.
+	AIReviewOverride *bool
 	// CredentialStatus must come from a trusted authentication or credential source.
 	CredentialStatus CredentialStatus
 }
@@ -117,9 +152,13 @@ type CredentialStatus struct {
 // value inferred from caller headers. Raw identifiers and country codes are not
 // retained by the engine.
 type PaymentEvent struct {
-	SubjectID   string
-	CountryCode string
-	Timestamp   time.Time
+	SubjectID                    string
+	CountryCode                  string
+	Timestamp                    time.Time
+	TenantID                     string `json:"-"`
+	MaxPaymentsPerWindowOverride int
+	AlertThresholdOverride       *int
+	AIReviewOverride             *bool
 }
 
 // Completion contains request outcome metadata. It must not contain response bodies
@@ -134,8 +173,10 @@ type Completion struct {
 // Handle correlates a request's post-hook with its pre-hook. Its fields are private
 // and contain only a process-keyed HMAC profile digest and a sequence number.
 type Handle struct {
-	profileID string
-	sequence  uint64
+	profileID       string
+	sequence        uint64
+	threshold       int
+	aiReviewAllowed bool
 }
 
 // Assessment is the current score and its explanation.
@@ -145,18 +186,22 @@ type Assessment struct {
 
 // Metrics is a privacy-preserving aggregate snapshot.
 type Metrics struct {
-	Profiles           int    `json:"profiles"`
-	Cohorts            int    `json:"cohorts"`
-	PaymentSubjects    int    `json:"payment_subjects"`
-	Requests           uint64 `json:"requests"`
-	PaymentEvents      uint64 `json:"payment_events"`
-	Findings           uint64 `json:"findings"`
-	Alerts             uint64 `json:"alerts"`
-	ExemptRequests     uint64 `json:"exempt_requests"`
-	AIReviewsQueued    uint64 `json:"ai_reviews_queued"`
-	AIReviewsDropped   uint64 `json:"ai_reviews_dropped"`
-	AIReviewsCompleted uint64 `json:"ai_reviews_completed"`
-	AIReviewsFailed    uint64 `json:"ai_reviews_failed"`
+	Profiles                  int    `json:"profiles"`
+	Cohorts                   int    `json:"cohorts"`
+	PaymentSubjects           int    `json:"payment_subjects"`
+	Requests                  uint64 `json:"requests"`
+	PaymentEvents             uint64 `json:"payment_events"`
+	Findings                  uint64 `json:"findings"`
+	Alerts                    uint64 `json:"alerts"`
+	ExemptRequests            uint64 `json:"exempt_requests"`
+	AIReviewsQueued           uint64 `json:"ai_reviews_queued"`
+	AIReviewsDropped          uint64 `json:"ai_reviews_dropped"`
+	AIReviewsCompleted        uint64 `json:"ai_reviews_completed"`
+	AIReviewsFailed           uint64 `json:"ai_reviews_failed"`
+	FindingCallbacksQueued    uint64 `json:"finding_callbacks_queued"`
+	FindingCallbacksDropped   uint64 `json:"finding_callbacks_dropped"`
+	FindingCallbacksCompleted uint64 `json:"finding_callbacks_completed"`
+	FindingCallbacksFailed    uint64 `json:"finding_callbacks_failed"`
 }
 
 type event struct {
@@ -194,24 +239,31 @@ type paymentProfile struct {
 
 // Engine owns the thread-safe profile store and deterministic scoring logic.
 type Engine struct {
-	mu         sync.Mutex
-	cfg        Config
-	hashKey    [32]byte
-	exemptions map[string]struct{}
-	profiles   map[string]*profile
-	cohorts    map[string]*cohortProfile
-	payments   map[string]*paymentProfile
-	nextID     uint64
-	metrics    Metrics
-	aiQueue    chan aiAnalysisJob
-	aiMu       sync.Mutex
-	aiClosed   bool
-	aiWG       sync.WaitGroup
+	mu            sync.Mutex
+	cfg           Config
+	hashKey       [32]byte
+	exemptions    map[string]struct{}
+	profiles      map[string]*profile
+	cohorts       map[string]*cohortProfile
+	payments      map[string]*paymentProfile
+	nextID        uint64
+	metrics       Metrics
+	aiQueue       chan aiAnalysisJob
+	aiMu          sync.Mutex
+	aiClosed      bool
+	aiWG          sync.WaitGroup
+	findingQueue  chan Finding
+	findingMu     sync.Mutex
+	findingClosed bool
+	findingWG     sync.WaitGroup
 }
 
 // NewEngine creates an in-memory detector. A random process-local HMAC key ensures
 // profile map keys cannot be reversed or correlated across restarts.
 func NewEngine(config Config) (*Engine, error) {
+	if config.EnableCustomPromptRules && config.CustomPromptRules == nil {
+		return nil, errors.New("fraudguard: custom prompt rules enabled without a rule set")
+	}
 	config = withDefaults(config)
 	if config.EnableAIAnalysis && config.AIAnalyzer == nil {
 		return nil, errors.New("fraudguard: AI analysis enabled without a host model adapter")
@@ -238,6 +290,11 @@ func NewEngine(config Config) (*Engine, error) {
 	}
 	// Keep only digests; the caller-provided identifiers must not remain in config.
 	engine.cfg.ExemptVirtualKeyIDs = nil
+	if config.OnFinding != nil {
+		engine.findingQueue = make(chan Finding, config.FindingCallbackQueueSize)
+		engine.findingWG.Add(1)
+		go engine.runFindingWorker()
+	}
 	if config.EnableAIAnalysis {
 		engine.aiQueue = make(chan aiAnalysisJob, config.AIAnalysisQueueSize)
 		for i := 0; i < config.AIAnalysisWorkers; i++ {
@@ -300,6 +357,36 @@ func withDefaults(config Config) Config {
 	if config.AlertThreshold > 100 {
 		config.AlertThreshold = 100
 	}
+	if config.MaxPromptBytes <= 0 {
+		config.MaxPromptBytes = 32_768
+	}
+	if config.MaxPromptBytes > 4*1024*1024 {
+		config.MaxPromptBytes = 4 * 1024 * 1024
+	}
+	if config.MaxPromptScanBytes <= 0 {
+		config.MaxPromptScanBytes = 64 * 1024
+	}
+	if config.MaxPromptScanBytes > 1024*1024 {
+		config.MaxPromptScanBytes = 1024 * 1024
+	}
+	if config.MaxContextMessages <= 0 {
+		config.MaxContextMessages = defaultContextMessages
+	}
+	if config.MaxContextMessages > maxContextMessages {
+		config.MaxContextMessages = maxContextMessages
+	}
+	if config.MaxContextScanBytes <= 0 {
+		config.MaxContextScanBytes = defaultContextScanBytes
+	}
+	if config.MaxContextScanBytes > maxContextScanBytes {
+		config.MaxContextScanBytes = maxContextScanBytes
+	}
+	if config.FindingCallbackQueueSize <= 0 {
+		config.FindingCallbackQueueSize = 256
+	}
+	if config.FindingCallbackQueueSize > 4096 {
+		config.FindingCallbackQueueSize = 4096
+	}
 	if config.AIAnalysisMinScore <= 0 {
 		config.AIAnalysisMinScore = config.AlertThreshold
 	}
@@ -340,12 +427,27 @@ func (e *Engine) Start(request Request) (Handle, Assessment) {
 	model := safeLabel(request.Model)
 
 	e.mu.Lock()
+	threshold := e.cfg.AlertThreshold
+	if request.AlertThresholdOverride != nil && *request.AlertThresholdOverride >= 0 && *request.AlertThresholdOverride <= 100 {
+		threshold = *request.AlertThresholdOverride
+	}
+	aiReviewAllowed := e.cfg.EnableAIAnalysis
+	if request.AIReviewOverride != nil {
+		aiReviewAllowed = aiReviewAllowed && *request.AIReviewOverride
+	}
 	if _, exempt := e.exemptions[id]; exempt {
 		e.metrics.ExemptRequests++
 		e.mu.Unlock()
 		return Handle{}, Assessment{Finding: e.emptyFinding(now, false)}
 	}
 	var signals []Signal
+	if e.cfg.ThreatIntelFeed != nil && e.cfg.ThreatIntelFeed.MatchInternalKeyID(request.VirtualKeyID, now) {
+		signals = append(signals, Signal{
+			Name:   "trusted_threat_indicator",
+			Reason: "trusted local threat feed matched this resolved internal virtual key",
+			Weight: 60,
+		})
+	}
 	if e.cfg.EnableExpiredKeySignal && request.CredentialStatus.Expired {
 		signals = append(signals, Signal{
 			Name:   "key_expired",
@@ -365,6 +467,48 @@ func (e *Engine) Start(request Request) (Handle, Assessment) {
 			Name:   "key_exposed",
 			Reason: "trusted credential status marks this virtual key as exposed",
 			Weight: 70,
+		})
+	}
+	if e.cfg.EnablePromptOverrideSignals && request.PromptOverrideDetected {
+		signals = append(signals, Signal{
+			Name:   "prompt_override_phrase",
+			Reason: "user text matched a local override or jailbreak phrase heuristic",
+			Weight: 40,
+		})
+	}
+	if e.cfg.EnableCustomPromptRules && request.CustomPromptRuleMatched {
+		signals = append(signals, Signal{
+			Name:   "custom_prompt_pattern",
+			Reason: "user text matched an operator-configured advisory pattern",
+			Weight: 35,
+		})
+	}
+	if e.cfg.EnablePromptLengthSignal && request.PromptBytes > int64(e.cfg.MaxPromptBytes) {
+		signals = append(signals, Signal{
+			Name:   "prompt_size_spike",
+			Reason: "user text exceeded the configured prompt byte threshold",
+			Weight: 25,
+		})
+	}
+	if e.cfg.EnableContextGuard && request.ContextProgressiveJailbreak {
+		signals = append(signals, Signal{
+			Name:   "context_progressive_jailbreak",
+			Reason: "bounded user-turn history matched a staged instruction-override heuristic",
+			Weight: 35,
+		})
+	}
+	if e.cfg.EnableContextGuard && request.ContextDataExfiltration {
+		signals = append(signals, Signal{
+			Name:   "context_data_exfiltration",
+			Reason: "bounded user text matched a sensitive-information disclosure heuristic",
+			Weight: 45,
+		})
+	}
+	if e.cfg.EnableContextGuard && request.ContextSchemaManipulation {
+		signals = append(signals, Signal{
+			Name:   "context_schema_manipulation",
+			Reason: "bounded user text paired schema markers with an override directive",
+			Weight: 35,
 		})
 	}
 	if e.cfg.EnableCrossKeyCorrelation && request.CohortID != "" {
@@ -409,23 +553,29 @@ func (e *Engine) Start(request Request) (Handle, Assessment) {
 
 	e.nextID++
 	sequence := e.nextID
-	p.events = append(p.events, event{
+	newEvent := event{
 		sequence: sequence,
 		at:       now,
 		provider: provider,
 		model:    model,
-	})
+	}
 	if len(p.events) > e.cfg.MaxEventsPerProfile {
-		p.events = append([]event(nil), p.events[len(p.events)-e.cfg.MaxEventsPerProfile:]...)
+		p.events = p.events[len(p.events)-e.cfg.MaxEventsPerProfile:]
+	}
+	if len(p.events) < e.cfg.MaxEventsPerProfile {
+		p.events = append(p.events, newEvent)
+	} else {
+		copy(p.events, p.events[1:])
+		p.events[len(p.events)-1] = newEvent
 	}
 	p.lastSeen = now
 	e.metrics.Requests++
-	finding := e.makeFindingLocked(now, signals, warmup)
+	finding := e.makeFindingAtThresholdLocked(now, signals, warmup, threshold)
 	sink := e.cfg.OnFinding
 	e.mu.Unlock()
-	e.emit(sink, finding)
+	e.emit(sink, finding, aiReviewAllowed)
 
-	return Handle{profileID: id, sequence: sequence}, Assessment{Finding: finding}
+	return Handle{profileID: id, sequence: sequence, threshold: threshold, aiReviewAllowed: aiReviewAllowed}, Assessment{Finding: finding}
 }
 
 // Complete records response usage and failure outcome, then scores token-volume
@@ -490,10 +640,14 @@ func (e *Engine) Complete(handle Handle, completion Completion) Assessment {
 	current.failed = completion.Failed
 	p.events[idx] = current
 	p.lastSeen = now
-	finding := e.makeFindingLocked(now, signals, warmup)
+	threshold := handle.threshold
+	if threshold < 0 || threshold > 100 {
+		threshold = e.cfg.AlertThreshold
+	}
+	finding := e.makeFindingAtThresholdLocked(now, signals, warmup, threshold)
 	sink := e.cfg.OnFinding
 	e.mu.Unlock()
-	e.emit(sink, finding)
+	e.emit(sink, finding, handle.aiReviewAllowed)
 	return Assessment{Finding: finding}
 }
 
@@ -507,27 +661,42 @@ func (e *Engine) RecordPayment(payment PaymentEvent) Assessment {
 	}
 	now = now.UTC()
 	subjectID := strings.TrimSpace(payment.SubjectID)
-	if subjectID == "" || (!e.cfg.EnablePaymentVelocity && !e.cfg.EnablePaymentLocation) {
+	if subjectID == "" {
 		return Assessment{Finding: e.emptyFinding(now, false)}
 	}
 
+	subjectDigest := e.digest("payment-subject", subjectID)
+	e.mu.Lock()
+	if !e.cfg.EnablePaymentVelocity && !e.cfg.EnablePaymentLocation {
+		e.mu.Unlock()
+		return Assessment{Finding: e.emptyFinding(now, false)}
+	}
 	countryDigest := ""
 	if e.cfg.EnablePaymentLocation {
 		if country := normalizeCountryCode(payment.CountryCode); country != "" {
 			countryDigest = e.digest("payment-country", country)
 		}
 	}
-	subjectDigest := e.digest("payment-subject", subjectID)
-
-	e.mu.Lock()
+	maxPayments := e.cfg.MaxPaymentsPerWindow
+	if payment.MaxPaymentsPerWindowOverride > 0 {
+		maxPayments = min(payment.MaxPaymentsPerWindowOverride, e.cfg.MaxPaymentEventsPerSubject)
+	}
+	threshold := e.cfg.AlertThreshold
+	if payment.AlertThresholdOverride != nil && *payment.AlertThresholdOverride >= 0 && *payment.AlertThresholdOverride <= 100 {
+		threshold = *payment.AlertThresholdOverride
+	}
+	aiReviewAllowed := e.cfg.EnableAIAnalysis
+	if payment.AIReviewOverride != nil {
+		aiReviewAllowed = aiReviewAllowed && *payment.AIReviewOverride
+	}
 	p := e.getOrCreatePaymentProfileLocked(subjectDigest, now)
 	e.prunePaymentEventsLocked(p, now)
 	signals := make([]Signal, 0, 2)
 	if e.cfg.EnablePaymentVelocity {
-		if len(p.events) <= e.cfg.MaxPaymentsPerWindow {
+		if len(p.events) <= maxPayments {
 			p.velocityAlerted = false
 		}
-		if len(p.events)+1 > e.cfg.MaxPaymentsPerWindow && !p.velocityAlerted {
+		if len(p.events)+1 > maxPayments && !p.velocityAlerted {
 			signals = append(signals, Signal{
 				Name:   "payment_velocity",
 				Reason: "trusted payment-event count exceeded the configured rolling-window limit",
@@ -545,16 +714,22 @@ func (e *Engine) RecordPayment(payment PaymentEvent) Assessment {
 			Weight: 35,
 		})
 	}
-	p.events = append(p.events, paymentObservation{at: now, countryDigest: countryDigest})
+	newObservation := paymentObservation{at: now, countryDigest: countryDigest}
 	if len(p.events) > e.cfg.MaxPaymentEventsPerSubject {
-		p.events = append([]paymentObservation(nil), p.events[len(p.events)-e.cfg.MaxPaymentEventsPerSubject:]...)
+		p.events = p.events[len(p.events)-e.cfg.MaxPaymentEventsPerSubject:]
+	}
+	if len(p.events) < e.cfg.MaxPaymentEventsPerSubject {
+		p.events = append(p.events, newObservation)
+	} else {
+		copy(p.events, p.events[1:])
+		p.events[len(p.events)-1] = newObservation
 	}
 	p.lastSeen = now
 	e.metrics.PaymentEvents++
-	finding := e.makeFindingLocked(now, signals, false)
+	finding := e.makeFindingAtThresholdLocked(now, signals, false, threshold)
 	sink := e.cfg.OnFinding
 	e.mu.Unlock()
-	e.emit(sink, finding)
+	e.emit(sink, finding, aiReviewAllowed)
 	return Assessment{Finding: finding}
 }
 
@@ -579,6 +754,104 @@ func (e *Engine) Metrics() Metrics {
 	out.Cohorts = len(e.cohorts)
 	out.PaymentSubjects = len(e.payments)
 	return out
+}
+
+func (e *Engine) configSnapshot() Config {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	config := e.cfg
+	config.ExemptVirtualKeyIDs = nil
+	return config
+}
+
+func (e *Engine) applyRuntimeConfig(settings runtimeConfig) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	e.cfg.AlertThreshold = settings.alertThreshold
+	e.cfg.WarmupRequests = settings.warmupRequests
+	e.cfg.Window = settings.window
+	e.cfg.ProfileTTL = settings.profileTTL
+	e.cfg.MaxProfiles = settings.maxProfiles
+	e.cfg.MaxEventsPerProfile = settings.maxEventsPerProfile
+	e.cfg.EnableCrossKeyCorrelation = settings.enableCrossKeyCorrelation
+	e.cfg.MaxDistinctKeysPerIdentity = settings.maxDistinctKeysPerIdentity
+	e.cfg.CorrelationWindow = settings.correlationWindow
+	e.cfg.EnablePaymentVelocity = settings.enablePaymentVelocity
+	e.cfg.EnablePaymentLocation = settings.enablePaymentLocation
+	e.cfg.PaymentWindow = settings.paymentWindow
+	e.cfg.PaymentProfileTTL = settings.paymentProfileTTL
+	e.cfg.MaxPaymentSubjects = settings.maxPaymentSubjects
+	e.cfg.MaxPaymentEventsPerSubject = settings.maxPaymentEventsPerSubject
+	e.cfg.MaxPaymentsPerWindow = settings.maxPaymentsPerWindow
+	e.cfg.PaymentLocationWarmupEvents = settings.paymentLocationWarmupEvents
+	e.cfg.EnableExpiredKeySignal = settings.enableExpiredKeySignal
+	e.cfg.EnableRevokedKeySignal = settings.enableRevokedKeySignal
+	e.cfg.EnableExposedKeySignal = settings.enableExposedKeySignal
+	e.cfg.EnablePromptOverrideSignals = settings.enablePromptOverrideSignals
+	e.cfg.EnablePromptLengthSignal = settings.enablePromptLengthSignal
+	e.cfg.MaxPromptBytes = settings.maxPromptBytes
+	e.cfg.MaxPromptScanBytes = settings.maxPromptScanBytes
+	e.cfg.EnableContextGuard = settings.enableContextGuard
+	e.cfg.MaxContextMessages = settings.maxContextMessages
+	e.cfg.MaxContextScanBytes = settings.maxContextScanBytes
+
+	// Rebuild exemptions as keyed digests; neither the engine nor the reloader
+	// retains clear-text IDs after this update.
+	e.exemptions = make(map[string]struct{}, len(settings.exemptVirtualKeyIDs))
+	for _, id := range settings.exemptVirtualKeyIDs {
+		digest := e.profileDigest(id)
+		e.exemptions[digest] = struct{}{}
+		delete(e.profiles, digest)
+		for _, cohort := range e.cohorts {
+			delete(cohort.keys, digest)
+		}
+	}
+
+	now := time.Now().UTC()
+	e.pruneProfilesLocked(now)
+	e.pruneCohortsLocked(now)
+	e.prunePaymentProfilesLocked(now)
+	for _, profile := range e.profiles {
+		if len(profile.events) > e.cfg.MaxEventsPerProfile {
+			profile.events = append([]event(nil), profile.events[len(profile.events)-e.cfg.MaxEventsPerProfile:]...)
+		}
+	}
+	for len(e.profiles) > e.cfg.MaxProfiles {
+		e.evictOldestLocked()
+	}
+	if !e.cfg.EnableCrossKeyCorrelation {
+		clear(e.cohorts)
+	} else {
+		for _, cohort := range e.cohorts {
+			for len(cohort.keys) > e.cfg.MaxDistinctKeysPerIdentity {
+				var oldestID string
+				var oldest time.Time
+				for id, seen := range cohort.keys {
+					if oldestID == "" || seen.Before(oldest) || (seen.Equal(oldest) && id < oldestID) {
+						oldestID, oldest = id, seen
+					}
+				}
+				delete(cohort.keys, oldestID)
+			}
+			cohort.alerted = false
+		}
+		for len(e.cohorts) > e.cfg.MaxProfiles {
+			e.evictOldestCohortLocked()
+		}
+	}
+	if !e.cfg.EnablePaymentVelocity && !e.cfg.EnablePaymentLocation {
+		clear(e.payments)
+	} else {
+		for _, profile := range e.payments {
+			if len(profile.events) > e.cfg.MaxPaymentEventsPerSubject {
+				profile.events = append([]paymentObservation(nil), profile.events[len(profile.events)-e.cfg.MaxPaymentEventsPerSubject:]...)
+			}
+		}
+		for len(e.payments) > e.cfg.MaxPaymentSubjects {
+			e.evictOldestPaymentProfileLocked()
+		}
+	}
 }
 
 func (e *Engine) profileDigest(id string) string {
@@ -771,6 +1044,10 @@ func (e *Engine) pruneEventsLocked(p *profile, now time.Time) {
 }
 
 func (e *Engine) makeFindingLocked(now time.Time, signals []Signal, warmup bool) Finding {
+	return e.makeFindingAtThresholdLocked(now, signals, warmup, e.cfg.AlertThreshold)
+}
+
+func (e *Engine) makeFindingAtThresholdLocked(now time.Time, signals []Signal, warmup bool, threshold int) Finding {
 	sort.Slice(signals, func(i, j int) bool { return signals[i].Name < signals[j].Name })
 	score := 0
 	for _, signal := range signals {
@@ -782,8 +1059,8 @@ func (e *Engine) makeFindingLocked(now time.Time, signals []Signal, warmup bool)
 	finding := Finding{
 		Timestamp: now,
 		Score:     score,
-		Threshold: e.cfg.AlertThreshold,
-		Alert:     score >= e.cfg.AlertThreshold,
+		Threshold: threshold,
+		Alert:     score >= threshold,
 		Warmup:    warmup,
 		Signals:   append([]Signal(nil), signals...),
 	}
@@ -796,15 +1073,20 @@ func (e *Engine) makeFindingLocked(now time.Time, signals []Signal, warmup bool)
 	return finding
 }
 
-func (e *Engine) emit(sink func(Finding), finding Finding) {
+func (e *Engine) emit(sink func(Finding), finding Finding, aiReviewAllowed bool) {
 	if sink != nil && len(finding.Signals) > 0 {
-		sink(cloneFinding(finding))
+		e.enqueueFindingCallback(finding)
 	}
-	e.enqueueAIReview(finding)
+	if aiReviewAllowed {
+		e.enqueueAIReview(finding)
+	}
 }
 
 func (e *Engine) emptyFinding(now time.Time, warmup bool) Finding {
-	return Finding{Timestamp: now.UTC(), Threshold: e.cfg.AlertThreshold, Warmup: warmup}
+	e.mu.Lock()
+	threshold := e.cfg.AlertThreshold
+	e.mu.Unlock()
+	return Finding{Timestamp: now.UTC(), Threshold: threshold, Warmup: warmup}
 }
 
 func normalizeCountryCode(value string) string {

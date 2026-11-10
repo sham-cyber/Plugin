@@ -1,0 +1,104 @@
+diff --git a/transports/bifrost-http/lib/config.go b/transports/bifrost-http/lib/config.go
+--- a/transports/bifrost-http/lib/config.go
++++ b/transports/bifrost-http/lib/config.go
+@@ -149,2 +149,3 @@
+ 	routing.PluginName,
++"fraudguard",
+ }
+diff --git a/transports/bifrost-http/server/plugins.go b/transports/bifrost-http/server/plugins.go
+--- a/transports/bifrost-http/server/plugins.go
++++ b/transports/bifrost-http/server/plugins.go
+@@ -9,2 +9,3 @@
+ 	"github.com/maximhq/bifrost/core/schemas"
++"github.com/maximhq/bifrost/plugins/fraudguard"
+ 	"github.com/maximhq/bifrost/plugins/compat"
+@@ -203,4 +204,15 @@
+ 	case modelcatalogresolver.PluginName:
+ 		return modelcatalogresolver.Init(bifrostConfig.ModelCatalog, logger)
+ 
++	case fraudguard.PluginName:
++		fraudguardConfig, err := MarshalPluginConfig[fraudguard.Config](pluginConfig)
++		if err != nil {
++			return nil, fmt.Errorf("failed to marshal FraudGuard plugin config: %w", err)
++		}
++		var config fraudguard.Config
++		if fraudguardConfig != nil {
++			config = *fraudguardConfig
++		}
++		return fraudguard.NewFromEnvironment(config)
++
+ 	default:
+@@ -319,0 +331,9 @@
++	// FraudGuard is explicitly enabled after governance resolves the key.
++	fraudguardConfig := s.getPluginConfig(fraudguard.PluginName)
++	if fraudguardConfig != nil && fraudguardConfig.Enabled {
++		s.registerPluginWithStatus(ctx, fraudguard.PluginName, nil, fraudguardConfig.Config, false)
++	} else {
++		s.markPluginDisabled(fraudguard.PluginName)
++	}
++	s.Config.SetPluginOrderInfo(fraudguard.PluginName, builtinPlacement, schemas.Ptr(6))
++
+@@ -319,1 +340,1 @@
+-	// 6. OTEL (if configured in PluginConfigs)
++	// 7. OTEL (if configured in PluginConfigs)
+@@ -326,1 +347,1 @@
+-	s.Config.SetPluginOrderInfo(otel.PluginName, builtinPlacement, schemas.Ptr(6))
++	s.Config.SetPluginOrderInfo(otel.PluginName, builtinPlacement, schemas.Ptr(7))
+@@ -328,1 +349,1 @@
+-	// 7. Semantic Cache (if configured in PluginConfigs)
++	// 8. Semantic Cache (if configured in PluginConfigs)
+@@ -335,1 +356,1 @@
+-	s.Config.SetPluginOrderInfo(semanticcache.PluginName, builtinPlacement, schemas.Ptr(7))
++	s.Config.SetPluginOrderInfo(semanticcache.PluginName, builtinPlacement, schemas.Ptr(8))
+@@ -337,1 +358,1 @@
+-	// 8. Compat (if any compat feature is enabled in ClientConfig)
++	// 9. Compat (if any compat feature is enabled in ClientConfig)
+@@ -349,1 +370,1 @@
+-	s.Config.SetPluginOrderInfo(compat.PluginName, builtinPlacement, schemas.Ptr(8))
++	s.Config.SetPluginOrderInfo(compat.PluginName, builtinPlacement, schemas.Ptr(9))
+@@ -351,1 +372,1 @@
+-	// 9. Maxim (if configured in PluginConfigs)
++	// 10. Maxim (if configured in PluginConfigs)
+@@ -358,1 +379,1 @@
+-	s.Config.SetPluginOrderInfo(maxim.PluginName, builtinPlacement, schemas.Ptr(9))
++	s.Config.SetPluginOrderInfo(maxim.PluginName, builtinPlacement, schemas.Ptr(10))
+@@ -360,1 +381,1 @@
+-	// 10. ModelCatalogResolver (last routing layer — fills req.Provider from catalog only when
++	// 11. ModelCatalogResolver (last routing layer — fills req.Provider from catalog only when
+diff --git a/transports/bifrost-http/server/fraudguard_plugin_test.go b/transports/bifrost-http/server/fraudguard_plugin_test.go
+new file mode 100644
+--- /dev/null
++++ b/transports/bifrost-http/server/fraudguard_plugin_test.go
+@@ -0,0 +1,32 @@
++package server
++
++import (
++	"context"
++	"testing"
++
++	"github.com/maximhq/bifrost/core/schemas"
++	"github.com/maximhq/bifrost/plugins/fraudguard"
++	"github.com/maximhq/bifrost/transports/v2/bifrost-http/lib"
++)
++
++func TestFraudGuardBuiltinPluginLoadsAndPassesThrough(t *testing.T) {
++	if !lib.IsBuiltinPlugin(fraudguard.PluginName) {
++		t.Fatal("FraudGuard is not registered as a built-in plugin")
++	}
++	plugin, err := InstantiatePlugin(context.Background(), fraudguard.PluginName, nil, map[string]any{}, &lib.Config{})
++	if err != nil {
++		t.Fatal(err)
++	}
++	llmPlugin, ok := plugin.(schemas.LLMPlugin)
++	if !ok {
++		t.Fatal("FraudGuard does not implement schemas.LLMPlugin")
++	}
++	request := &schemas.BifrostRequest{}
++	got, shortCircuit, err := llmPlugin.PreLLMHook(nil, request)
++	if err != nil || shortCircuit != nil || got != request {
++		t.Fatalf("hook did not preserve the request: same=%t short=%v err=%v", got == request, shortCircuit, err)
++	}
++	if err := plugin.Cleanup(); err != nil {
++		t.Fatal(err)
++	}
++}

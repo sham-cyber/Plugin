@@ -1,4 +1,6 @@
 - [Bifrost Go toolchain](bifrost-go-toolchain.md) — upstream plugin modules require Go 1.27.3; this Replit environment may need explicit checksum verification to fetch it.
+- [Bifrost monorepo builds](bifrost-monorepo-build.md) — use local sibling-module replacements when published modules lag the checked-out source.
 - [FraudGuard buyer model](fraudguard-buyer-model.md) — target global AI gateway operators; Finolex figures are context, not assumed customers or API-key volume.
 - [FraudGuard API-key provision](fraudguard-api-key-provision.md) — the user expects API keys to be provided for the plugin; clarify their type and destination before implementation.
-- [FraudGuard hackathon focus](fraudguard-hackathon-focus.md) — keep pages, demos, and proposed work anchored to the working Bifrost Go prototype and verifiable execution.
+- [FraudGuard production hardening](fraudguard-hackathon-focus.md) — preserve observe-only handling; prompt checks stay opt-in and transient, and live production requires gateway integration and validation.
+- [FraudGuard hot-path benchmarks](fraudguard-hot-path-benchmarks.md) — keep bounded history eviction allocation-light and report engine benchmarks separately from end-to-end gateway latency.

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "client": {
+    "enforce_auth_on_inference": true,
+    "disable_content_logging": true
+  },
+  "providers": {
+    "vllm-local": {
+      "keys": [
+        {
+          "name": "fraudguard-demo-key",
+          "value": "local-demo-only",
+          "models": ["*"],
+          "weight": 1.0
+        }
+      ],
+      "network_config": {
+        "base_url": "http://mock-provider:9090",
+        "default_request_timeout_in_seconds": 10
+      },
+      "custom_provider_config": {
+        "base_provider_type": "openai",
+        "allowed_requests": {
+          "chat_completion": true,
+          "chat_completion_stream": false
+        }
+      }
+    }
+  },
+  "governance": {
+    "virtual_keys": [
+      {
+        "id": "fraudguard-demo-vk",
+        "name": "FraudGuard local synthetic demo",
+        "value": "sk-bf-fraudguard-local-demo",
+        "is_active": true,
+        "provider_configs": [
+          {
+            "provider": "vllm-local",
+            "allowed_models": ["*"],
+            "key_ids": ["fraudguard-demo-key"],
+            "weight": 1.0
+          }
+        ]
+      }
+    ]
+  },
+  "plugins": [
+    {
+      "name": "fraudguard",
+      "enabled": true,
+      "config": {
+        "alert_threshold": 60,
+        "warmup_requests": 1,
+        "window": "15m",
+        "profile_ttl": "2h",
+        "max_profiles": 10000,
+        "enable_prompt_override_signals": true,
+        "enable_context_guard": true,
+        "max_context_messages": 16,
+        "max_context_scan_bytes": 65536
+      }
+    }
+  ]
+}

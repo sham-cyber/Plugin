@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: fraudguard
+    description: Local synthetic FraudGuard demo operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,25 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /fraudguard/demo:
+    get:
+      operationId: getFraudGuardDemo
+      tags: [fraudguard]
+      summary: Run the FraudGuard synthetic demo
+      description: Runs fixed synthetic scenarios through the local FraudGuard Go engine and returns its findings. No customer traffic or credentials are used.
+      responses:
+        "200":
+          description: Findings produced by the Go detector
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FraudGuardDemoResponse"
+        "503":
+          description: The Go demo engine is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
 components:
   schemas:
     HealthStatus:
@@ -33,4 +54,91 @@ components:
           type: string
       required:
         - status
+    FraudGuardSignal:
+      type: object
+      properties:
+        name:
+          type: string
+        reason:
+          type: string
+        weight:
+          type: integer
+      required:
+        - name
+        - reason
+        - weight
+    FraudGuardFinding:
+      type: object
+      properties:
+        timestamp:
+          type: string
+          format: date-time
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+        threshold:
+          type: integer
+          minimum: 1
+          maximum: 100
+        alert:
+          type: boolean
+        warmup:
+          type: boolean
+        signals:
+          type: array
+          items:
+            $ref: "#/components/schemas/FraudGuardSignal"
+      required:
+        - timestamp
+        - score
+        - threshold
+        - alert
+        - warmup
+        - signals
+    FraudGuardDemoCase:
+      type: object
+      properties:
+        id:
+          type: string
+          enum: [behavior, payment, key_status]
+        title:
+          type: string
+        description:
+          type: string
+        finding:
+          $ref: "#/components/schemas/FraudGuardFinding"
+      required:
+        - id
+        - title
+        - description
+        - finding
+    FraudGuardDemoResponse:
+      type: object
+      properties:
+        source:
+          type: string
+          enum: [fraudguard-go-engine]
+        synthetic:
+          type: boolean
+          enum: [true]
+        generated_at:
+          type: string
+          format: date-time
+        cases:
+          type: array
+          items:
+            $ref: "#/components/schemas/FraudGuardDemoCase"
+      required:
+        - source
+        - synthetic
+        - generated_at
+        - cases
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required:
+        - error
 

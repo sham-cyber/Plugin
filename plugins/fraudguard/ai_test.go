@@ -90,6 +90,38 @@ func TestAIReviewIsOptInPrivacySafeAndAdvisory(t *testing.T) {
 	}
 }
 
+func TestTenantPlanCanDisableOptionalAIReview(t *testing.T) {
+	called := make(chan struct{}, 1)
+	engine, err := NewEngine(Config{
+		WarmupRequests:     1,
+		AlertThreshold:     30,
+		EnableAIAnalysis:   true,
+		AIAnalysisMinScore: 30,
+		AIAnalyzer: AIAnalyzerFunc(func(context.Context, AIAnalysisInput) (AIAnalysisResult, error) {
+			called <- struct{}{}
+			return AIAnalysisResult{Conclusion: AIConclusionNoAddedConcern}, nil
+		}),
+		OnAIReview: func(AIReviewEvent) {},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer engine.Close()
+
+	disabled := false
+	base := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+	engine.Start(Request{VirtualKeyID: "tenant-key", Provider: "p1", Model: "m1", Timestamp: base, AIReviewOverride: &disabled})
+	engine.Start(Request{VirtualKeyID: "tenant-key", Provider: "p2", Model: "m2", Timestamp: base.Add(time.Minute), AIReviewOverride: &disabled})
+	if metrics := engine.Metrics(); metrics.AIReviewsQueued != 0 {
+		t.Fatalf("plan-disabled AI review was still queued: %+v", metrics)
+	}
+	select {
+	case <-called:
+		t.Fatal("plan-disabled AI adapter was called")
+	case <-time.After(30 * time.Millisecond):
+	}
+}
+
 func TestAIAnalysisDisabledByDefault(t *testing.T) {
 	called := make(chan struct{}, 1)
 	engine := testEngine(t, Config{
@@ -205,6 +237,58 @@ func TestAIAdapterFailureDoesNotChangeFinding(t *testing.T) {
 	}
 	if got := engine.Metrics(); got.AIReviewsFailed != 1 || got.AIReviewsCompleted != 0 {
 		t.Fatalf("adapter error should be counted without exposing error text: %+v", got)
+	}
+}
+
+func TestAIPanicsAreContainedAndCounted(t *testing.T) {
+	tests := []struct {
+		name     string
+		analyzer AIAnalyzer
+		callback func(AIReviewEvent)
+	}{
+		{
+			name: "analyzer",
+			analyzer: AIAnalyzerFunc(func(context.Context, AIAnalysisInput) (AIAnalysisResult, error) {
+				panic("private analyzer failure")
+			}),
+			callback: func(AIReviewEvent) {},
+		},
+		{
+			name: "review callback",
+			analyzer: AIAnalyzerFunc(func(context.Context, AIAnalysisInput) (AIAnalysisResult, error) {
+				return AIAnalysisResult{
+					Conclusion:  AIConclusionReviewSuggested,
+					Confidence:  50,
+					Explanation: "Review the behavior summary.",
+				}, nil
+			}),
+			callback: func(AIReviewEvent) {
+				panic("private callback failure")
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			engine, err := NewEngine(Config{
+				WarmupRequests:     1,
+				EnableAIAnalysis:   true,
+				AIAnalysisMinScore: 1,
+				AIAnalyzer:         test.analyzer,
+				OnAIReview:         test.callback,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			base := time.Date(2026, 11, 9, 10, 0, 0, 0, time.UTC)
+			engine.Start(Request{VirtualKeyID: "key", Provider: "p1", Model: "m1", Timestamp: base})
+			engine.Start(Request{VirtualKeyID: "key", Provider: "p2", Model: "m2", Timestamp: base.Add(time.Minute)})
+			if err := engine.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if got := engine.Metrics(); got.AIReviewsFailed != 1 || got.AIReviewsCompleted != 0 {
+				t.Fatalf("AI panic was not contained and counted: %+v", got)
+			}
+		})
 	}
 }
 

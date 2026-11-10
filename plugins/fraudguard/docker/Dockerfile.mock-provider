@@ -1,0 +1,12 @@
+FROM golang:1.27.3-alpine3.24 AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+COPY cmd/mock-provider/ ./cmd/mock-provider/
+RUN GOSUMDB=sum.golang.org go build -trimpath -ldflags="-s -w" -o /mock-provider ./cmd/mock-provider
+
+FROM alpine:3.23.5
+RUN apk upgrade --no-cache && adduser -D -H -u 10001 app
+COPY --from=build /mock-provider /usr/local/bin/mock-provider
+USER 10001
+EXPOSE 9090
+ENTRYPOINT ["/usr/local/bin/mock-provider"]
