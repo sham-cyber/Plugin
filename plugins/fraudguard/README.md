@@ -17,7 +17,7 @@ make fraudguard-fuzz-smoke
 
 The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For a quick code review, start with [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md), then inspect [`plugin.go`](plugin.go), [`engine.go`](engine.go), and the tests in this directory. For the pinned Bifrost loader test, follow [Manual integration](#manually-integrate-with-a-bifrost-checkout); it requires a separate checkout at the exact pinned commit.
 
-GitHub Actions are not needed for this evaluation and have not been run. The workflow is configured for pull requests or manual dispatch; pushing to `main` does not start it.
+GitHub Actions are not needed for this evaluation, and none were run. The workflow file is intentionally not included in this GitHub update; use the local commands above to verify the project.
 
 ## Upstream contract and compatibility
 
