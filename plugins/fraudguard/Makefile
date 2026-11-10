@@ -1,5 +1,6 @@
 GO ?= go
 GOSUMDB ?= sum.golang.org
+FUZZTIME ?= 3s
 VERSION ?= $(shell git describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null || echo dev)
 COMMIT ?= $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
 BUILD_TIME ?= unknown
@@ -10,7 +11,7 @@ $(warning GOSUMDB=off disables public module checksum verification; using sum.go
 override GOSUMDB = sum.golang.org
 endif
 
-.PHONY: help setup build test race vet bench demo simulate chaos redis-check integration sanity verify
+.PHONY: help setup build test race vet bench fuzz-smoke demo simulate chaos redis-check integration sanity verify
 
 help:
 	@printf '%s\n' \
@@ -21,6 +22,7 @@ help:
 		'  make race         Run tests with the race detector' \
 		'  make vet          Run go vet' \
 		'  make bench        Run local detector/guard benchmarks' \
+	'  make fuzz-smoke   Run bounded local Go fuzz checks' \
 		'  make demo         Run synthetic observe-only examples' \
 		'  make chaos        Run local Redis/slow-service fault tests' \
 		'  make redis-check  Ping FRAUDGUARD_REDIS_URL without printing it' \
@@ -45,6 +47,10 @@ vet:
 
 bench:
 	GOSUMDB=$(GOSUMDB) $(GO) test -run '^$$' -bench 'BenchmarkEngine|BenchmarkInspectConversationContext' -benchmem -benchtime=1s -cpu 1,4 ./...
+
+fuzz-smoke:
+	GOSUMDB=$(GOSUMDB) $(GO) test -run '^$$' -fuzz '^FuzzDecodeRuntimeConfigBounded$$' -fuzztime=$(FUZZTIME) -parallel=1 .
+	GOSUMDB=$(GOSUMDB) $(GO) test -run '^$$' -fuzz '^FuzzInspectConversationContextBounded$$' -fuzztime=$(FUZZTIME) -parallel=1 .
 
 demo:
 	GOSUMDB=$(GOSUMDB) $(GO) run ./cmd/demo

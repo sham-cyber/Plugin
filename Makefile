@@ -1,7 +1,8 @@
 GO ?= go
 GOSUMDB ?= sum.golang.org
+FUZZTIME ?= 3s
 
-.PHONY: help fraudguard-build fraudguard-test fraudguard-race fraudguard-vet fraudguard-chaos fraudguard-demo fraudguard-compose-demo fraudguard-load-test fraudguard-integration fraudguard-sanity fraudguard-verify fraudguard-release-preflight
+.PHONY: help fraudguard-build fraudguard-test fraudguard-race fraudguard-vet fraudguard-fuzz-smoke fraudguard-chaos fraudguard-demo fraudguard-compose-demo fraudguard-load-test fraudguard-integration fraudguard-sanity fraudguard-verify fraudguard-release-preflight
 
 help:
 	@printf '%s\n' \
@@ -10,6 +11,7 @@ help:
 		'  make fraudguard-test           Run unit and local-fixture tests' \
 		'  make fraudguard-race           Run tests with the race detector' \
 		'  make fraudguard-vet            Run go vet' \
+		'  make fraudguard-fuzz-smoke     Run bounded local Go fuzz checks' \
 		'  make fraudguard-chaos          Run Redis-outage and slow-service fault tests' \
 		'  make fraudguard-demo           Run the local synthetic observe-only demo' \
 		'  make fraudguard-compose-demo   Run the disposable pinned-Bifrost Docker demo' \
@@ -30,6 +32,9 @@ fraudguard-race:
 
 fraudguard-vet:
 	$(MAKE) -C plugins/fraudguard vet GO="$(GO)" GOSUMDB="$(GOSUMDB)"
+
+fraudguard-fuzz-smoke:
+	$(MAKE) -C plugins/fraudguard fuzz-smoke GO="$(GO)" GOSUMDB="$(GOSUMDB)" FUZZTIME="$(FUZZTIME)"
 
 fraudguard-chaos:
 	$(MAKE) -C plugins/fraudguard chaos GO="$(GO)" GOSUMDB="$(GOSUMDB)"
