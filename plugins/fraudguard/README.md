@@ -19,6 +19,15 @@ The demo data is synthetic. No company traffic is loaded, no prompt or key is se
 
 GitHub Actions are not needed for this evaluation, and none were run. The workflow file is intentionally not included in this GitHub update; use the local commands above to verify the project.
 
+### Submission requirements, answered point by point
+
+1. **Working project or demo:** FraudGuard is a runnable Go plugin module with a synthetic detector demo and tests. Use the two commands above. The demo shows observe-only findings; it is not a live Bifrost deployment, and the company dashboard is still a synthetic preview.
+2. **Source code or repository:** [github.com/sham-cyber/Plugin](https://github.com/sham-cyber/Plugin). The source is under `plugins/fraudguard/`.
+3. **Project description:** FraudGuard is an observe-only Bifrost plugin that keeps a bounded behavioral baseline per resolved virtual key and reports explainable risk signals when request behavior changes.
+4. **Problem being solved:** Request-count limits can miss suspicious changes that stay below their thresholds, such as model/provider probing, sudden token-volume shifts, unusually fast requests, or repeated failures. FraudGuard highlights these patterns for operator review; it does not prove malicious intent.
+5. **Technologies and tools used:** Go 1.27.3, Bifrost's `schemas.LLMPlugin` contract, Go's standard library, Make, Go tests/race detector/vet, and miniredis test fixtures. Optional integrations include Redis for product services and Prometheus/OpenTelemetry for host-mounted observability; neither is required for the local demo.
+6. **How AI is used:** The default detector uses deterministic Go rules and rolling statistics, not an AI model. Optional AI review is off by default and requires a host-supplied adapter using Bifrost's selected model. It receives only bounded scores and named signals—not prompts, keys, or provider/model labels—and its advice cannot change the score or request flow. The local demo makes no AI calls.
+
 ## Upstream contract and compatibility
 
 The hook shape was inspected at upstream commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
