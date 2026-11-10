@@ -12,7 +12,7 @@ diff --git a/transports/bifrost-http/server/plugins.go b/transports/bifrost-http
  	"github.com/maximhq/bifrost/core/schemas"
 +"github.com/maximhq/bifrost/plugins/fraudguard"
  	"github.com/maximhq/bifrost/plugins/compat"
-@@ -203,4 +204,15 @@
+@@ -203,4 +204,27 @@
  	case modelcatalogresolver.PluginName:
  		return modelcatalogresolver.Init(bifrostConfig.ModelCatalog, logger)
  
@@ -24,6 +24,18 @@ diff --git a/transports/bifrost-http/server/plugins.go b/transports/bifrost-http
 +		var config fraudguard.Config
 +		if fraudguardConfig != nil {
 +			config = *fraudguardConfig
++		}
++		if config.OnFinding == nil {
++			config.OnFinding = func(finding fraudguard.Finding) {
++				if logger == nil || !finding.Alert || len(finding.Signals) == 0 {
++					return
++				}
++				signalNames := make([]string, 0, len(finding.Signals))
++				for _, signal := range finding.Signals {
++					signalNames = append(signalNames, signal.Name)
++				}
++				logger.Warn("FraudGuard observe-only alert: score=%d threshold=%d signals=%v", finding.Score, finding.Threshold, signalNames)
++			}
 +		}
 +		return fraudguard.NewFromEnvironment(config)
 +

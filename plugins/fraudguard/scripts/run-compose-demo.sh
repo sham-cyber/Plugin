@@ -14,9 +14,38 @@ if [[ -n "$mode" && "$mode" != "--smoke" ]]; then
   exit 2
 fi
 
+compose_args=(-f "$compose_file")
+compose_override=""
+if [[ "$mode" == "--smoke" ]]; then
+  # Some managed Docker runners cannot execute in-container health checks.
+  # The smoke path uses host-side HTTP readiness checks instead.
+  compose_override="$workspace_root/generated-artifacts/fraudguard-compose-smoke-$$.yml"
+  cat > "$compose_override" <<'EOF'
+services:
+  redis:
+    healthcheck:
+      disable: true
+  mock-provider:
+    healthcheck:
+      disable: true
+  bifrost:
+    depends_on:
+      redis:
+        condition: service_started
+      mock-provider:
+        condition: service_started
+    healthcheck:
+      disable: true
+EOF
+  compose_args+=(-f "$compose_override")
+fi
+
 cleanup() {
-  docker compose -p "$project_name" -f "$compose_file" down --remove-orphans --volumes >/dev/null 2>&1 || true
+  docker compose -p "$project_name" "${compose_args[@]}" down --remove-orphans --volumes >/dev/null 2>&1 || true
   rm -rf "$source_root"
+  if [[ -n "$compose_override" ]]; then
+    rm -f "$compose_override"
+  fi
 }
 trap cleanup EXIT INT TERM
 
@@ -38,16 +67,22 @@ fi
 BIFROST_ROOT="$source_root" bash "$module_dir/integration/apply-bifrost-integration.sh" --apply
 export BIFROST_ROOT="$source_root"
 
+echo "Running the pinned Bifrost HTTP server plugin-loader test."
+(
+  cd "$source_root/transports"
+  GOSUMDB=sum.golang.org go test -p 1 ./bifrost-http/server
+)
+
 echo "Starting pinned Bifrost + local FraudGuard overlay, Redis, and synthetic provider."
 echo "Inference demo key: sk-bf-fraudguard-local-demo"
 echo "No live provider or external AI service is used."
 if [[ "$mode" != "--smoke" ]]; then
-  docker compose -p "$project_name" -f "$compose_file" up --build
+  docker compose -p "$project_name" "${compose_args[@]}" up --build
   exit 0
 fi
 
 command -v curl >/dev/null || { echo "curl is required for --smoke" >&2; exit 1; }
-docker compose -p "$project_name" -f "$compose_file" up --build --detach
+docker compose -p "$project_name" "${compose_args[@]}" up --build --detach
 
 ready=0
 for _ in $(seq 1 90); do
@@ -59,7 +94,7 @@ for _ in $(seq 1 90); do
 done
 if [[ "$ready" -ne 1 ]]; then
   echo "Bifrost did not become healthy within 180 seconds." >&2
-  docker compose -p "$project_name" -f "$compose_file" logs --tail=80
+  docker compose -p "$project_name" "${compose_args[@]}" logs --tail=80
   exit 1
 fi
 
@@ -78,11 +113,30 @@ for case_name in baseline context-anomaly; do
     --data "$request_body")"
   if [[ "$status" != "200" ]]; then
     echo "Synthetic $case_name request returned HTTP $status; expected observe-only pass-through (200)." >&2
-    docker compose -p "$project_name" -f "$compose_file" logs --tail=80 bifrost mock-provider
+    docker compose -p "$project_name" "${compose_args[@]}" logs --tail=80 bifrost mock-provider
     exit 1
   fi
   echo "Synthetic $case_name request passed through the local mock gateway (HTTP 200)."
 done
+
+server_logs=""
+finding_log=""
+for _ in $(seq 1 20); do
+  server_logs="$(docker compose -p "$project_name" "${compose_args[@]}" logs --no-color --since=2m bifrost)"
+  finding_log="$(printf '%s\n' "$server_logs" | grep -F 'FraudGuard observe-only alert:' | tail -n 1 || true)"
+  [[ -n "$finding_log" ]] && break
+  sleep 0.5
+done
+if [[ -z "$finding_log" ]]; then
+  echo "The synthetic anomaly passed through, but the Bifrost logs did not show a FraudGuard alert." >&2
+  printf '%s\n' "$server_logs" >&2
+  exit 1
+fi
+if [[ "$finding_log" == *"Ignore previous instructions"* || "$finding_log" == *"sk-bf-fraudguard-local-demo"* ]]; then
+  echo "The FraudGuard alert log unexpectedly contains request text or a demo key." >&2
+  exit 1
+fi
+echo "Synthetic anomaly produced a sanitized FraudGuard alert in the Bifrost logs."
 
 echo "Deterministic local detector output (synthetic, not read from live gateway storage):"
 (cd "$module_dir" && GOSUMDB=sum.golang.org go run ./cmd/demo)
