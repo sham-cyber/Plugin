@@ -4,7 +4,7 @@
 
 FraudGuard is an observe-only Go plugin module for Bifrost. It looks for changes in how an authenticated virtual key uses AI models—such as model/provider probing, unusual token volume, rapid request sequences, or repeated failures—and reports explainable risk findings. It does not block or modify requests.
 
-The hackathon problem is a specific feature gap, not an absence of a Bifrost plugin system: at the inspected commit, Bifrost had governance limits, retry-related provider key rotation, and a shared-object loader, but no dedicated per-virtual-key behavior detector. FraudGuard is the proposed community plugin for that missing detector.
+The hackathon problem is a specific, source-checked feature gap, not an absence of a Bifrost plugin system: at the inspected commit, Bifrost had governance limits, retry-related provider key rotation, and a shared-object loader, but no dedicated per-virtual-key behavior detector. FraudGuard is the proposed community plugin for that confirmed gap.
 
 The code is in `plugins/fraudguard`. It implements Bifrost's `schemas.LLMPlugin` contract and has a native `.so` adapter for Bifrost's existing loader. The optional local integration overlay targets Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` (2026-11-03). FraudGuard itself is not a built-in Bifrost feature and has not been accepted or merged upstream.
 
