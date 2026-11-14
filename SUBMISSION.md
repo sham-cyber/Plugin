@@ -4,7 +4,9 @@
 
 FraudGuard is an observe-only Go plugin module for Bifrost. It looks for changes in how an authenticated virtual key uses AI models—such as model/provider probing, unusual token volume, rapid request sequences, or repeated failures—and reports explainable risk findings. It does not block or modify requests.
 
-The code is in `plugins/fraudguard`. It implements Bifrost's `schemas.LLMPlugin` contract and can be supplied directly through `core.Init`. The optional local integration overlay targets Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` (2026-11-03). FraudGuard is not a built-in Bifrost feature and has not been accepted or merged upstream.
+The hackathon problem is a specific feature gap, not an absence of a Bifrost plugin system: at the inspected commit, Bifrost had governance limits, retry-related provider key rotation, and a shared-object loader, but no dedicated per-virtual-key behavior detector. FraudGuard is the proposed community plugin for that missing detector.
+
+The code is in `plugins/fraudguard`. It implements Bifrost's `schemas.LLMPlugin` contract and has a native `.so` adapter for Bifrost's existing loader. The optional local integration overlay targets Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` (2026-11-03). FraudGuard itself is not a built-in Bifrost feature and has not been accepted or merged upstream.
 
 ## Architecture
 
@@ -19,6 +21,7 @@ Bifrost request hook
 ```
 
 - Profiles are process-local, bounded, and expire after inactivity. Redis is not the behavioral profile store.
+- The native `.so` adapter uses Bifrost's existing shared-object loader; it does not add a new loader feature to Bifrost.
 - Findings contain named signals and aggregate metadata, not prompt text, payloads, bearer keys, or raw key IDs.
 - Prompt and multi-turn context checks are disabled by default. When enabled, they scan bounded user text transiently and return only fixed signal flags.
 - Payment velocity/location and credential-status checks require trusted host-provided inputs. There is no payment-provider or credential registry connection in this submission.
@@ -52,7 +55,7 @@ bash plugins/fraudguard/scripts/demo_walkthrough.sh --compose
 
 The local demo prints deterministic synthetic examples, including an alerting multi-turn context case. The Compose smoke path sends benign and anomalous synthetic requests through the pinned local Bifrost build and expects both to receive HTTP 200. It then prints separate in-process synthetic detector results. Those scores are not presented as live gateway findings. The local mock provider does not call an external model.
 
-The Compose mode has not been run as part of this submission's verification. It is a reproducible test path, not evidence of a production deployment. The authenticated admin CLI can read `/admin/fraudguard/metrics`, `/status`, and `/healthz` only when the host mounts the handler and provides authorization; no such endpoint is mounted by default.
+The Compose mode was run successfully on 2026-11-14 against the pinned Bifrost commit. Baseline and synthetic anomalous requests both received HTTP 200; the anomaly produced a sanitized alert and remained unchanged. This is a local synthetic smoke test, not evidence of a production deployment. The authenticated admin CLI can read `/admin/fraudguard/metrics`, `/status`, and `/healthz` only when the host mounts the handler and provides authorization; no such endpoint is mounted by default.
 
 ## Health and readiness
 
@@ -96,16 +99,17 @@ Because the plugin code is Apache-2.0, the commercial value should come from opt
 
 ## CI and verification
 
-`.github/workflows/fraud-plugin-ci.yml` is configured to run Go build/tests, the race detector, `go vet`, local benchmarks, pinned Bifrost API compatibility checks, and Docker Compose image builds on pull requests or manual dispatch. The workflow file has not yet run on GitHub.
+GitHub Actions remain pending and were not run. A CI workflow draft is present on the current local branch but has not been pushed to GitHub or executed.
 
 Locally verified for this submission:
 
 - `make verify`: build, tests, race detector, vet, and synthetic demo passed.
 - `make bench`: completed and emitted the measurements above.
 - `demo_walkthrough.sh --local`: completed.
+- Pinned Bifrost `.so` build and loader checks passed; the server package test passed.
+- Full local Compose smoke passed on 2026-11-14 with Redis TCP readiness, mock-provider HTTP readiness, and observe-only HTTP 200 pass-through for baseline and anomalous requests.
 - Compose configuration, shell syntax, JSON config, and `git diff --check` passed.
-- Full Docker image build and Compose smoke mode were not run.
 
 ## Technologies
 
-Go 1.27.3, Bifrost core plugin interfaces, Redis client (optional product services), OpenTelemetry metrics, Prometheus text metrics, miniredis test fixtures, Docker Compose, and GitHub Actions.
+Go 1.27.3, Bifrost core plugin interfaces and shared-object loader, Redis client (optional product services), OpenTelemetry metrics, Prometheus text metrics, miniredis test fixtures, and Docker Compose. GitHub Actions are pending and were not run.

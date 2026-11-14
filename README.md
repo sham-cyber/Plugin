@@ -6,24 +6,6 @@ This is a hackathon project: an observe-only Go plugin for Bifrost, with a synth
 
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
-## Project documents
-
-The technical README includes setup, demo, tests, Bifrost integration, privacy limits, and limitations. The judge-facing scope and runbook are in [SUBMISSION.md](SUBMISSION.md):
-
-[Open the full FraudGuard README](plugins/fraudguard/README.md)
-
-[Open the verification report](VERIFICATION_REPORT.md)
-
-[Read the contribution guide](CONTRIBUTING.md)
-
-[Open the operations runbook](RUNBOOK.md)
-
-[Read the monetization architecture](MONETIZATION.md)
-[Read the hackathon pitch](PITCH.md)
-[Read the presentation outline](PRESENTATION.md)
-[Read the release manifest](RELEASE.md)
-[Run local release checks](scripts/deploy.sh)
-
 ## Project story: missing feature, implementation, and proof
 
 ### 1. The missing Bifrost capability
@@ -50,7 +32,7 @@ This proves local compatibility with the pinned revision and synthetic setup onl
 
 This README gives the problem-to-proof story. The [plugin README](plugins/fraudguard/README.md) covers implementation and setup; [SUBMISSION.md](SUBMISSION.md) is the judge-facing feature and submission guide; [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) records detailed evidence and limitations.
 
-[Open the operations runbook](RUNBOOK.md) · [Read the monetization architecture](MONETIZATION.md) · [Read the hackathon pitch](PITCH.md) · [Read the presentation outline](PRESENTATION.md)
+[Contribution guide](CONTRIBUTING.md) · [Operations runbook](RUNBOOK.md) · [Monetization architecture](MONETIZATION.md) · [Hackathon pitch](PITCH.md) · [Presentation outline](PRESENTATION.md) · [Release manifest](RELEASE.md) · [Local release checks](scripts/deploy.sh)
 
 ## Detailed verification report — checks and limits
 
@@ -98,9 +80,13 @@ The tests cover optional transient prompt checks, user-text-only scope, scan cap
 
 ### Advisory extensions and local container harness (2026-11-10)
 
+*Historical status as of 2026-11-10; the pinned Bifrost image build and full synthetic Compose smoke were completed later on 2026-11-14, as recorded above and in verification report section 22.*
+
 The current `make verify` run passed after adding bounded HMAC-only trusted internal-key indicators, an observe-only token/cost budget monitor, HMAC webhook verification, the opt-in context guard, read-only admin CLI tests, and authenticated health/readiness probes. Local source-level benchmarks measured the engine at 5.8–26.4 µs/op and context inspection at 1.40–1.61 µs/op on this environment; these exclude Bifrost HTTP, Redis, and provider latency and are not a gateway latency guarantee. Compose configuration, launcher shell syntax, and JSON files validated. The complete pinned Bifrost Docker image build and multi-container runtime were **not** run; the Compose file is a reproducible local harness, not evidence of a production deployment.
 
 ### Tracing and fault-injection checks (2026-11-10)
+
+*Historical status as of 2026-11-10; the later full local Compose smoke is recorded in verification report section 22.*
 
 OpenTelemetry spans now cover plugin hooks, opt-in text inspection, risk scoring, and optional Redis product operations. The host must configure a tracer provider to export them; this change did not test an external exporter. Local chaos tests use miniredis and an in-process slow ledger to verify pass-through during optional-service failures. `go test ./...`, `go test -race ./...`, `go vet ./...`, the root Makefile build/chaos/demo/help targets, and `git diff --check` passed. No penalty box or automatic cooldown was added, and no real Redis Cluster, network-fault, pinned Compose, or production-traffic test was run.
 

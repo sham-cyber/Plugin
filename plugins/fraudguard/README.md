@@ -15,9 +15,9 @@ make fraudguard-fuzz-smoke
 
 `fraudguard-verify` builds the module, runs unit tests, the race detector and `go vet`, then prints synthetic observe-only examples. `fraudguard-fuzz-smoke` runs two bounded fuzz checks for three seconds each by default; use `make fraudguard-fuzz-smoke FUZZTIME=15s` for a longer local pass.
 
-The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For a quick code review, start with [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md), then inspect [`plugin.go`](plugin.go), [`engine.go`](engine.go), and the tests in this directory. The pinned loader build and local synthetic server smoke commands are documented under [Native Bifrost shared-object integration](#native-bifrost-shared-object-integration); the harness supplies local model-catalog files and a mock provider.
+The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For the problem-to-proof story, start with the repository [README](../../README.md); this file covers implementation and setup, while [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md) records detailed checks and limitations. The pinned loader build and local synthetic server smoke commands are documented under [Native Bifrost shared-object integration](#native-bifrost-shared-object-integration).
 
-GitHub Actions are not needed for this evaluation, and none were run. The workflow file is intentionally not included in this GitHub update; use the local commands above to verify the project.
+GitHub Actions are not needed for this evaluation, and none were run. A workflow draft exists on the current local branch but has not been pushed to GitHub or executed; use the local commands above to verify the project.
 
 ### Submission requirements, answered point by point
 
@@ -30,7 +30,7 @@ GitHub Actions are not needed for this evaluation, and none were run. The workfl
 
 ## Upstream contract and compatibility
 
-The hook shape was inspected at upstream commit [`54ad3abec4f4bbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
+The hook shape was inspected at upstream commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
 
 At that revision, Bifrost has governance budgets/rate limits, provider-failure retry key rotation, and a shared-object loader for custom Go plugins. The inspected source has no dedicated behavior-based fraud detector. FraudGuard targets that specific missing feature; it does not add the generic dynamic-plugin mechanism and complements rather than replaces Governance.
 

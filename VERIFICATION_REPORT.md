@@ -1,8 +1,8 @@
 # FraudGuard verification report
 
-**Report date:** 2026-11-10
+**Report updated:** 2026-11-14
 
-**Purpose:** Record the pinned Bifrost inspection, module checks, Redis-backed product services, local server-loader overlay, and what has not been verified. This report does not claim a live production deployment.
+**Purpose:** Record the pinned Bifrost feature-gap inspection, plugin compatibility checks, native shared-object build and local smoke evidence, and remaining limitations. This report does not claim a live production deployment.
 
 ## 1. Problem and upstream inspection
 
@@ -15,7 +15,7 @@ The inspected source includes:
 - `core/bifrost.go` for provider retry/key-rotation behavior.
 - The upstream `plugins/` directory and its built-in plugin loader.
 
-The inspected plugin list contains no `fraudguard` module. A source search found no dedicated behavior-based fraud/anomaly detector in the inspected `plugins/` or `core/` Go source. This is a bounded source inspection, not a claim that no custom plugin could ever be written.
+The inspected plugin list contains no `fraudguard` module. A source search found no dedicated behavior-based fraud/anomaly detector in the inspected `plugins/` or `core/` Go source. The inspected source does include a shared-object loader for custom Go plugins. The missing feature is a built-in behavior detector, not generic dynamic-plugin support. This is a bounded source inspection, not a claim that no custom plugin could ever be written.
 
 The existing features are related but different: Governance handles configured request/token limits, and core key rotation is tied to provider failures/retries. The inspected source does not provide a dedicated per-virtual-key rolling behavior score for deviations such as new model/provider use, unusually rapid requests, or token-volume changes.
 
@@ -28,9 +28,9 @@ At the inspected commit, `schemas.LLMPlugin` requires the base plugin methods an
 - `PreLLMHook`
 - `PostLLMHook`
 
-The module includes a compile-time interface assertion and hook tests. Its module uses Bifrost core API version `v1.14.1`; an earlier validation used a temporary Go workspace pointing to the local upstream `core` source at the pinned commit. The latest hardening checks below used the pinned core module version, not a live Bifrost server.
+The module includes a compile-time interface assertion and hook tests. Its module uses Bifrost core API version `v1.14.1`; an earlier validation used a temporary Go workspace pointing to the local upstream `core` source at the pinned commit. Most hardening checks below used the pinned core module version and local fixtures; the later native-loader and local server smoke are recorded in section 22.
 
-Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documented in `plugins/fraudguard/README.md`. A local overlay and guarded installer now add the plugin name and loader case to a separate Bifrost checkout at the pinned commit. This is a local integration patch only; it has not been pushed to or accepted by upstream.
+Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documented in `plugins/fraudguard/README.md`. The native `.so` adapter uses the existing Bifrost shared-object loader; the separate local overlay is another integration method that adds FraudGuard to a disposable checkout. Neither changes the public upstream repository, and neither has been accepted or merged upstream. The native loader and local server smoke results are recorded in section 22.
 
 ## 3. What the module implements
 
@@ -114,12 +114,12 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 
 ## 6. Not verified / not claimed
 
-- FraudGuard is **not** installed, accepted, or merged into upstream Bifrost.
-- The built-in loader overlay is present and applied to a temporary local checkout. The pinned server-package test passed after applying the overlay. The plugin is not installed, accepted, or merged upstream.
+- FraudGuard is **not** built into, accepted, or merged into upstream Bifrost.
+- The local source overlay was applied only to a temporary checkout and its server-package test passed. Separately, section 22 records the native `.so` loader and Compose smoke checks. Neither method changes upstream.
 - No live Bifrost-host model adapter was connected or tested; the adapter contract was tested with an in-process test implementation.
 - No production Redis, webhook endpoint, Stripe/billing engine, multi-replica, or real-customer traffic test was run. Redis and webhooks were tested only with local containers or fixtures.
 - No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
-- No latency benchmark was run; no sub-30ms target is claimed.
+- No end-to-end Bifrost gateway latency benchmark was run; local engine microbenchmarks are recorded in section 10, and no sub-30ms target is claimed.
 - Behavioral profiles remain in-memory and process-local; only product usage and audit data can be shared through Redis. No live tenant-facing dashboard, tenant authentication, subscription service, or email/SMS delivery is connected.
 - Usage metering is asynchronous and can drop events on bounded-queue overflow; it is not a financial source of truth. Usage export is a helper, not an invoice or Stripe integration.
 - Payment velocity counts each host-supplied payment event. Payment retry deduplication must be done by the host and is not implemented here.
@@ -146,6 +146,8 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 - No live Redis, external metrics scrape, real admin server/authentication, or updated pinned Bifrost inbound HTTP server test was run. No upstream changes or push were made.
 
 ## 9. Trusted advisory inputs, webhook verification, and Compose harness (2026-11-10)
+
+*Historical status as of 2026-11-10; section 22 records the later successful full local Compose smoke.*
 
 - Added an optional `ThreatIntelFeed` that accepts only trusted, already-resolved internal virtual-key IDs, immediately HMACs them, and keeps bounded expiring digests in process memory. A match adds a fixed advisory signal. It does not read IP addresses, user-agent strings, caller-controlled headers, or external feeds; it never blocks or drops a request.
 - Added an optional `BudgetMonitor` for host-supplied token counts and trusted estimated cost in micro-USD. It returns warning/over-limit fields and aggregate metrics only. It does not estimate provider pricing, enforce caps, or interrupt requests; the bounded counters are process-local and reset on restart.
@@ -252,6 +254,8 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 
 ## 20. Host-side readiness and Bifrost HTTP smoke (2026-11-10)
 
+*Historical status as of 2026-11-10; the full rebuild that timed out in this section was later completed successfully as recorded in section 22.*
+
 - `plugins/fraudguard/scripts/run-compose-demo.sh --smoke` now checks Redis with a raw TCP connection to the configured host port (6379 by default), the mock provider with HTTP `GET /healthz`, and Bifrost with HTTP `GET /health`. Redis is not treated as an HTTP service. The smoke-only Compose override binds published ports to loopback, uses an automatically assigned Bifrost host port by default, and disables in-container health checks for managed runners that reject Docker healthcheck execs.
 - A fresh temporary checkout of Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` passed `go test -p 1 ./bifrost-http/server` with the local FraudGuard loader overlay.
 - A local Compose runtime using the previously built image for that pinned Bifrost overlay passed the raw Redis TCP check, mock-provider HTTP readiness check, and Bifrost HTTP health check. Synthetic baseline and context-anomaly chat requests both returned HTTP 200, confirming observe-only pass-through. A FraudGuard finding appeared in Bifrost logs without the prompt text or virtual-key value.
@@ -267,10 +271,11 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 4. **Load, chaos, and fuzz checks:** Added bounded Go fuzz targets for runtime-config decoding and context scanning, plus a local `make fraudguard-fuzz-smoke` command. `make fraudguard-verify`, `make fraudguard-fuzz-smoke`, `make fraudguard-chaos`, and the in-process benchmark suite passed. Benchmarks are local engine measurements, not gateway latency or an SLO. No packet-loss drill, production traffic, or multi-replica load test was run.
 5. **Observability and security:** Existing code provides aggregate Prometheus text, optional host-meter OpenTelemetry instruments, JSON audit records with HMAC signatures, bounded configuration validation, and host-managed secret handling. Metrics/admin endpoints and external exporters must be mounted by the host; secret contents are deliberately not inspected. No production collector, external audit sink, or secret manager was connected.
 
-GitHub Actions remain pending and were not started. The workflow file is intentionally excluded from this GitHub update; the local verification commands above are the evaluation path.
+GitHub Actions remain pending and were not started. A workflow draft exists on the current local branch but has not been pushed to GitHub or executed; the local verification commands above are the evaluation path.
 
 ## 22. Native Bifrost shared-object build and full local smoke (2026-11-14)
 
+- The pinned Bifrost source already provides the shared-object loader. This verification tests FraudGuard against that existing loader; it does not claim that this project added dynamic-plugin support to Bifrost.
 - Built FraudGuard as a Go `.so` and built Bifrost itself as a dynamically linked server from the pinned upstream commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` using Go 1.27.3. The pinned Bifrost shared-object loader accepted the adapter; its reload/cleanup test and LLM hook pass-through check passed.
 - The pinned Bifrost server package test passed. The full local Docker Compose build and smoke completed successfully, including the actual Bifrost server, the FraudGuard `.so`, Redis, and a synthetic HTTP mock provider.
 - Readiness checks used raw TCP for Redis on port 6379 and HTTP for the mock provider. A synthetic baseline chat request and a synthetic context-anomaly request both passed through Bifrost with HTTP 200. The anomaly generated a sanitized FraudGuard alert in Bifrost logs; the request was observed, not blocked or modified.
