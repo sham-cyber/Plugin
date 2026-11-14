@@ -225,3 +225,31 @@ mtime_ms = 1794337844601
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/afa05e17-cc71-44a3-8cee-52523b8bf35d/a4423bf1-044a-448a-b691-54628ed78b42"
 storage_version_token = "1794337889206785"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "cdvhe3XIuvQghE_tjNOsF"
+uri = "file://generated-artifacts/fraudguard-bifrost-linux-amd64-54ad3ab.so"
+type = "unspecified"
+title = "FraudGuard Bifrost plugin (.so)"
+description = "Linux AMD64 shared-object build for Bifrost commit 54ad3ab, built with Go 1.27.3. SHA-256: 34337715d66a124206b6232b2cca3c40ad925d7da352694d89d9f8776dc62482"
+logical_id = "3238a486-5cca-4cc0-9bf6-ff84104cd4c2"
+content_hash = "sha256:34337715d66a124206b6232b2cca3c40ad925d7da352694d89d9f8776dc62482"
+size = 46231496
+mtime_ms = 1794667253529
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/3238a486-5cca-4cc0-9bf6-ff84104cd4c2/c0381dab-da29-48fb-97b7-e6add78afcac"
+storage_version_token = "1794673344146434"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Iic4z9OhyR-_d2PNxJK2k"
+uri = "file://generated-artifacts/fraudguard-bifrost-linux-amd64-54ad3ab.so.sha256"
+type = "unspecified"
+title = "FraudGuard plugin SHA-256 checksum"
+description = "Checksum file for the attached Linux AMD64 FraudGuard .so. Run sha256sum -c after placing both files in the same directory."
+logical_id = "da58167a-f270-45e2-8d22-29cc2109a23e"
+content_hash = "sha256:def7c3915ef3c03b72167c3761077f988ba7191660593063c7ef988a88cb04b1"
+size = 108
+mtime_ms = 1794667306737
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/da58167a-f270-45e2-8d22-29cc2109a23e/95aea3e3-3749-4461-9df4-4fa124bd32cf"
+storage_version_token = "1794673345399215"
+content_type = "application/octet-stream"
