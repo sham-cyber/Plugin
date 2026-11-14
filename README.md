@@ -6,15 +6,15 @@ This is a hackathon project: an observe-only Go plugin for Bifrost, with a synth
 
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
-## Project story: missing feature, implementation, and proof
+## Hackathon problem, solution, and verification
 
-### 1. Confirmed missing feature in the inspected Bifrost source
+### 1. Problem context in the inspected Bifrost source
 
-Inspection of Bifrost commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9) confirmed that Governance provides configured request/token limits and core retry logic can rotate provider keys after failures, but the inspected source does not include a dedicated per-virtual-key behavioral detector that learns normal model/provider use, request spacing, token volume, and errors, then reports deviations. That confirmed gap is what this hackathon project addresses.
+Inspection of Bifrost commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9) confirmed that Governance provides configured request/token limits and core retry logic can rotate provider keys after failures. This hackathon project explores an additional observe-only capability: a per-virtual-key detector that learns normal model/provider use, request spacing, token volume, and errors, then reports behavior changes for operator review.
 
-This is a commit-specific finding, not a claim that Bifrost has no plugin system. The pinned Bifrost source has a shared-object loader for custom Go plugins; what was missing from its built-in feature set was FraudGuard's behavior detector.
+This is a commit-specific description of the project scope, not a claim that Bifrost lacks a plugin system. The pinned Bifrost source already has a shared-object loader for custom Go plugins; FraudGuard uses that existing mechanism.
 
-### 2. How the gap was checked
+### 2. How the problem context was checked
 
 The inspection is tied to the commit above. It reviewed `core/schemas/plugin.go` for the plugin contract, `plugins/governance/main.go` for governance behavior, `core/bifrost.go` for retry/key rotation, and the upstream plugin directories and loader. The result is limited to those inspected source files and that commit.
 

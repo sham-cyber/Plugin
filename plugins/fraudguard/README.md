@@ -32,7 +32,7 @@ GitHub Actions are not needed for this evaluation, and none were run. A workflow
 
 The hook shape was inspected at upstream commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), specifically `core/schemas/plugin.go` and `plugins/governance/main.go`.
 
-At that revision, Bifrost has governance budgets/rate limits, provider-failure retry key rotation, and a shared-object loader for custom Go plugins. The inspected source has no dedicated behavior-based fraud detector. FraudGuard targets that specific missing feature; it does not add the generic dynamic-plugin mechanism and complements rather than replaces Governance.
+At that revision, Bifrost has governance budgets/rate limits, provider-failure retry key rotation, and a shared-object loader for custom Go plugins. FraudGuard is an independent, observe-only behavior-monitoring extension built for this hackathon. It uses the existing plugin mechanism and complements rather than replaces Governance.
 
 At that commit, an LLM plugin implements `schemas.LLMPlugin`:
 
