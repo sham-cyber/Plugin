@@ -1,6 +1,6 @@
 # FraudGuard: Bifrost behavior-detection plugin
 
-This project contains a production-oriented, observe-only Go plugin module for the Bifrost AI gateway, plus a synthetic hackathon demo. It looks for request-behavior changes that fixed request-count limits can miss, with separate opt-in signals for trusted payment events, credential status, bounded prompt checks, and transient multi-turn context heuristics. It reports findings; it never blocks requests or payments. A local integration overlay and Compose smoke-demo path are provided, but this is not an upstream feature or a production deployment; shared multi-replica behavior, trusted external sources, and production workload verification remain outstanding.
+This is a hackathon project: an observe-only Go plugin for Bifrost, with a synthetic demo and a locally verified dynamic-plugin integration. It looks for per-key behavior changes that fixed request-count limits can miss. It reports findings; it never blocks or changes requests. The local checks do not make this an upstream Bifrost feature or a production deployment.
 
 **Live demo:** [https://bifrost-fraud-detection-plugin.replit.app](https://bifrost-fraud-detection-plugin.replit.app) — Public synthetic demo page; it is not connected to live customer data or a production Bifrost deployment.
 
@@ -24,17 +24,45 @@ The technical README includes setup, demo, tests, Bifrost integration, privacy l
 [Read the release manifest](RELEASE.md)
 [Run local release checks](scripts/deploy.sh)
 
-## Verification Report — What Was Checked and What It Proves
+## Project story: missing feature, implementation, and proof
+
+### 1. The missing Bifrost capability
+
+At the inspected Bifrost commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9), Governance provides configured request/token limits and core retry logic can rotate provider keys after failures. The inspected source does not include a dedicated per-virtual-key behavioral detector that learns normal model/provider use, request spacing, token volume, and errors, then reports deviations. That is the gap this hackathon project addresses.
+
+This is a commit-specific finding, not a claim that Bifrost has no plugin system. The pinned Bifrost source has a shared-object loader for custom Go plugins; what was missing from its built-in feature set was FraudGuard's behavior detector.
+
+### 2. How the gap was checked
+
+The inspection is tied to the commit above. It reviewed `core/schemas/plugin.go` for the plugin contract, `plugins/governance/main.go` for governance behavior, `core/bifrost.go` for retry/key rotation, and the upstream plugin directories and loader. The result is limited to those inspected source files and that commit.
+
+### 3. What FraudGuard adds
+
+FraudGuard is a separate Go module implementing Bifrost's `schemas.LLMPlugin` hooks. It builds bounded, process-local per-virtual-key behavior profiles and produces deterministic 0–100 findings with named signals. Its native `.so` adapter uses Bifrost's existing shared-object loader. The separate source-overlay method is optional and is not required for the native `.so` path. Both approaches leave the public upstream repository unchanged; FraudGuard has not been merged or accepted upstream.
+
+### 4. What was verified
+
+On 2026-11-14, the native FraudGuard `.so` was built with the pinned Bifrost source and loaded through Bifrost's actual shared-object loader. Reload cleanup and hook discovery passed, and the observe-only hook preserved the request. The pinned Bifrost server package test passed. A full local synthetic Compose smoke then started Bifrost, FraudGuard, Redis, and a mock provider: baseline and anomalous requests both returned HTTP 200, and the anomaly produced a sanitized alert. The request was observed, not blocked or changed. The detailed commands, dated checks, and limits are in [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) and the [plugin guide](plugins/fraudguard/README.md).
+
+This proves local compatibility with the pinned revision and synthetic setup only. It does not prove production readiness, upstream acceptance, real-provider behavior, multi-replica operation, or production latency. GitHub Actions remain pending and were not run.
+
+## Project documents
+
+This README gives the problem-to-proof story. The [plugin README](plugins/fraudguard/README.md) covers implementation and setup; [SUBMISSION.md](SUBMISSION.md) is the judge-facing feature and submission guide; [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md) records detailed evidence and limitations.
+
+[Open the operations runbook](RUNBOOK.md) · [Read the monetization architecture](MONETIZATION.md) · [Read the hackathon pitch](PITCH.md) · [Read the presentation outline](PRESENTATION.md)
+
+## Detailed verification report — checks and limits
 
 This section is the project's evidence summary. It distinguishes what was checked from what remains unverified.
 
 ### Upstream inspection
 
-The Bifrost source was inspected at commit [`54ad3abec4fbbdaedf59414415094760fb9aa7e9`](https://github.com/maximhq/bifrost/tree/54ad3abec4fbbdaedf59414415094760fb9aa7e9). The inspected plugin list has no `fraudguard` module, and the inspected `plugins/` and `core/` Go source contain no dedicated per-virtual-key behavior-based fraud detector. Bifrost Governance provides configured request/token limits; core key rotation is tied to provider failures and retries. This finding is limited to the pinned source inspected.
+The inspected plugin list has no `fraudguard` module, and the inspected `plugins/` and `core/` Go source contain no dedicated per-virtual-key behavior-based fraud detector. Bifrost does have a shared-object loader for custom plugins. The missing capability is the detector itself, not generic dynamic plugin loading. This finding is limited to the pinned source inspected.
 
 ### Plugin compatibility and scope
 
-The module implements Bifrost's `schemas.LLMPlugin` hooks and includes a compile-time interface assertion and hook tests. It now includes a native shared-object adapter for Bifrost's documented custom-plugin loader. That path requires a dynamically linked Bifrost binary and a `.so` built with the same Go version, operating system, architecture, and libc. Direct `core.Init` registration remains an alternative Go SDK integration. The pinned-source demo uses a disposable checkout; the public Bifrost repository is not modified, and FraudGuard has not been installed, accepted, or merged upstream.
+The module implements Bifrost's `schemas.LLMPlugin` hooks and includes a compile-time interface assertion and hook tests. Its native shared-object adapter uses Bifrost's existing custom-plugin loader. That path requires a dynamically linked Bifrost binary and a `.so` built with the same Go version, operating system, architecture, and libc. Direct `core.Init` registration and the local source overlay are separate integration options. The pinned-source demo uses a disposable checkout; the public Bifrost repository is not modified, and FraudGuard has not been installed, accepted, or merged upstream.
 
 The module maintains bounded, in-memory, per-virtual-key behavior profiles and produces deterministic 0–100 scores with named signals. It covers model/provider novelty, rapid request sequences, token-volume spikes, repeated failures, and optional bounded phrase/size checks over user text. Separate opt-in signals are available for trusted payment-event velocity/location and trusted expired/revoked/exposed key-status inputs. Those inputs are not supplied automatically by Bifrost and all findings remain observe-only. Prompt text is scanned only when explicitly enabled, is never retained or emitted, and is excluded from cross-key correlation. Cross-key correlation is opt-in and does not use IP addresses or request headers. Optional AI review receives only a sanitized finding summary and cannot change the deterministic score or request handling.
 
@@ -107,15 +135,15 @@ The demo uses synthetic requests, payment events, and trusted key-status flags. 
 
 From the repository root, `make help` lists convenient FraudGuard targets, including `make fraudguard-test`, `make fraudguard-chaos`, `make fraudguard-demo`, `make fraudguard-compose-demo`, and `make fraudguard-load-test`.
 
-### Connect it to a Bifrost checkout
+### Load the native plugin in a pinned Bifrost checkout
 
-This is a companion module, not an upstream built-in Bifrost feature. For a local integration at the inspected Bifrost commit:
+The verified `.so` path uses Bifrost's existing custom-plugin loader; it does not require adding FraudGuard to Bifrost's source. For the pinned local build:
 
 1. Set `BIFROST_ROOT` to a separate local checkout of commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9`.
-2. Run `bash plugins/fraudguard/integration/apply-bifrost-integration.sh --apply` to add the local module and built-in loader registration in that checkout.
-3. Run the integration test as documented in the technical README. Review the resulting local diff.
+2. Follow [Native Bifrost shared-object integration](plugins/fraudguard/README.md#native-bifrost-shared-object-integration) to prepare and build the `.so`.
+3. Review the plugin configuration and binary compatibility requirements before loading it.
 
-This changes only the chosen local checkout; it does not commit or push to upstream. For an isolated Docker demonstration that prepares and removes its own pinned checkout, use `bash plugins/fraudguard/scripts/run-compose-demo.sh`. The full integration guide and limitations are in the [technical README](plugins/fraudguard/README.md).
+The separate source-overlay helper is an optional alternative and edits only the chosen local checkout; it does not commit or push to upstream. For an isolated Docker demonstration that prepares and removes its own pinned checkout, use `bash plugins/fraudguard/scripts/run-compose-demo.sh`.
 
 ## Implementation
 
@@ -155,7 +183,7 @@ The demo page is not a live company service: AshaRatna Tech is an illustrative l
 
 For an actual deployment, the planned work is:
 
-1. **Bifrost installation:** wire the module into a supported built-in server/plugin loader and document a repeatable install and configuration path. The host must also provide an isolated model adapter if AI review is enabled.
+1. **Bifrost distribution:** pursue upstream review or maintain a versioned external-plugin release and compatibility process. The local `.so` integration path has been demonstrated against one pinned revision; that is not upstream inclusion or a production support commitment. The host must also provide an isolated model adapter if AI review is enabled.
 2. **Company access:** implement authentication, tenant separation, team permissions, and a real findings dashboard. Keep each company's profiles and findings private.
 3. **Subscription and keys:** if the direct AshaRatna service is pursued, build company billing and a secure, separate FraudGuard entitlement model. If Bifrost is approached as a reseller, agree on distribution and billing terms first. The prototype neither issues product keys nor stores provider API keys; these must remain distinct concerns.
 4. **Email and SMS:** connect verified destinations and a delivery provider, with consent, retry, and audit behavior. Current alert cards are simulated previews, not delivery.
