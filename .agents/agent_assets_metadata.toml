@@ -267,3 +267,17 @@ mtime_ms = 1794675197595
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/a5d7be1f-cd75-48c8-8281-225c5c565f27/37afed33-d429-42e7-8868-38b95f349cee"
 storage_version_token = "1794675208286793"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "DDRX0AmldBR5bjILdPHAL"
+uri = "file://generated-artifacts/fraudguard-bifrost-linux-amd64-54ad3ab-release.zip"
+type = "unspecified"
+title = "FraudGuard GitHub Release bundle"
+description = "Upload this single ZIP as a release asset. It contains the Linux AMD64 plugin and its SHA-256 checksum."
+logical_id = "564f991d-5d2c-4a5d-b969-51a855e04fbb"
+content_hash = "sha256:17d24210938ba54be0989f995c39b71e342ed8f726f5f02a56dbc6668b078c96"
+size = 19851965
+mtime_ms = 1794677386846
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/564f991d-5d2c-4a5d-b969-51a855e04fbb/701136b8-cedd-4507-aed1-22358a991467"
+storage_version_token = "1794677398633196"
+content_type = "application/octet-stream"
