@@ -211,3 +211,17 @@ mtime_ms = 1793861446548
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/de882786-42fa-4489-842d-2f4c829676fe/507f9df5-460c-4cec-b41b-358976475cbe"
 storage_version_token = "1793861498978007"
 content_type = "application/pdf"
+
+[[outputs]]
+id = "4K5pAp0CjwxoX7sbXETkN"
+uri = "file://generated-artifacts/pitch.pdf"
+type = "pdf"
+title = "FraudGuard One-Page Pitch (PDF)"
+description = "One-page hackathon pitch covering the challenge, behavior-based approach, AI use, local test evidence, privacy, and prototype boundaries."
+logical_id = "afa05e17-cc71-44a3-8cee-52523b8bf35d"
+content_hash = "sha256:214fb22dd8070d69d1ce6c1246793f6d63d80997550b8bfc718bc3cd8385fbba"
+size = 81848
+mtime_ms = 1794337844601
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/afa05e17-cc71-44a3-8cee-52523b8bf35d/a4423bf1-044a-448a-b691-54628ed78b42"
+storage_version_token = "1794337889206785"
+content_type = "application/pdf"
