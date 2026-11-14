@@ -1,0 +1,6 @@
+{
+  "model-a": {
+    "supports_reasoning": false,
+    "supports_sampling_params": true
+  }
+}

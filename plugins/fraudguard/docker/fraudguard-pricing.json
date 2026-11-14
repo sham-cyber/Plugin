@@ -1,0 +1,8 @@
+{
+  "model-a": {
+    "provider": "vllm-local",
+    "mode": "chat",
+    "input_cost_per_token": 0,
+    "output_cost_per_token": 0
+  }
+}

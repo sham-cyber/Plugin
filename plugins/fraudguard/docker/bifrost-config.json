@@ -1,8 +1,18 @@
 {
+  "$schema": "file:///app/config.schema.json",
   "version": 1,
   "client": {
     "enforce_auth_on_inference": true,
     "disable_content_logging": true
+  },
+  "framework": {
+    "pricing": {
+      "pricing_url": "file:///app/fraudguard-pricing.json",
+      "pricing_sync_interval": 86400,
+      "model_parameters_url": "file:///app/fraudguard-model-parameters.json",
+      "mcp_library_url": "file:///app/fraudguard-mcp-library.json",
+      "mcp_library_sync_interval": 86400
+    }
   },
   "providers": {
     "vllm-local": {
@@ -51,6 +61,7 @@
     {
       "name": "fraudguard",
       "enabled": true,
+      "path": "/app/plugins/fraudguard.so",
       "config": {
         "alert_threshold": 60,
         "warmup_requests": 1,

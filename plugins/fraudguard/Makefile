@@ -11,13 +11,14 @@ $(warning GOSUMDB=off disables public module checksum verification; using sum.go
 override GOSUMDB = sum.golang.org
 endif
 
-.PHONY: help setup build test race vet bench fuzz-smoke demo simulate chaos redis-check integration sanity verify
+.PHONY: help setup build build-shared test race vet bench fuzz-smoke demo simulate chaos redis-check integration sanity verify
 
 help:
 	@printf '%s\n' \
 		'FraudGuard module targets:' \
 		'  make setup       Check local tools and run verification' \
 		'  make build        Compile all module packages with release metadata' \
+'  make build-shared Build and load-check the native Bifrost .so (set BIFROST_ROOT)' \
 		'  make test         Run all unit and local-fixture tests' \
 		'  make race         Run tests with the race detector' \
 		'  make vet          Run go vet' \
@@ -38,6 +39,9 @@ test:
 
 build:
 	GOSUMDB=$(GOSUMDB) $(GO) build -ldflags "$(BUILD_LDFLAGS)" ./...
+
+build-shared:
+BIFROST_ROOT="$(BIFROST_ROOT)" FRAUDGUARD_PLUGIN_OUTPUT="$(FRAUDGUARD_PLUGIN_OUTPUT)" bash scripts/build-shared-plugin.sh
 
 race:
 	GOSUMDB=$(GOSUMDB) $(GO) test -count=1 -race ./...

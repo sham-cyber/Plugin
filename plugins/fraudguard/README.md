@@ -2,7 +2,7 @@
 
 FraudGuard is an observe-only Go plugin module for the Bifrost AI gateway. It scores behavioral changes that request-count limits can miss, such as a sudden provider/model probe, a sharp usage-volume change, unusually fast requests relative to a key's own history, or a burst of failures. Redis-backed tenant metering, tier policies, sanitized audit records, and signed webhooks are optional product services. This is not yet validated as a live production deployment: detector profiles remain process-local, external trusted sources are not connected, and production workload checks have not been run.
 
-This code is a companion module in this Replit project. A local integration overlay and installer are included for the pinned Bifrost commit, but they do not change the upstream repository by themselves. FraudGuard is **not** included in upstream Bifrost, and no upstream acceptance or merge is claimed.
+This code is a companion module in this Replit project. It includes both a native `.so` adapter for Bifrost's documented shared-object loader and a separate local integration overlay for the pinned Bifrost commit. Neither changes the public upstream repository by itself. FraudGuard is **not** included in upstream Bifrost, and no upstream acceptance or merge is claimed.
 
 ## Hackathon Evaluation Guide
 
@@ -15,7 +15,7 @@ make fraudguard-fuzz-smoke
 
 `fraudguard-verify` builds the module, runs unit tests, the race detector and `go vet`, then prints synthetic observe-only examples. `fraudguard-fuzz-smoke` runs two bounded fuzz checks for three seconds each by default; use `make fraudguard-fuzz-smoke FUZZTIME=15s` for a longer local pass.
 
-The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For a quick code review, start with [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md), then inspect [`plugin.go`](plugin.go), [`engine.go`](engine.go), and the tests in this directory. For the pinned Bifrost loader test, follow [Manual integration](#manually-integrate-with-a-bifrost-checkout); it requires a separate checkout at the exact pinned commit.
+The demo data is synthetic. No company traffic is loaded, no prompt or key is sent to a service, and requests are never blocked or changed. For a quick code review, start with [`VERIFICATION_REPORT.md`](../../VERIFICATION_REPORT.md), then inspect [`plugin.go`](plugin.go), [`engine.go`](engine.go), and the tests in this directory. The pinned loader build and local synthetic server smoke commands are documented under [Native Bifrost shared-object integration](#native-bifrost-shared-object-integration); the harness supplies local model-catalog files and a mock provider.
 
 GitHub Actions are not needed for this evaluation, and none were run. The workflow file is intentionally not included in this GitHub update; use the local commands above to verify the project.
 
@@ -401,9 +401,42 @@ make verify
 
 The FraudGuard web page's **Run Go detector** action calls `GET /api/fraudguard/demo`. The local API server runs `go run ./cmd/demo -json` and validates the response before returning it. The endpoint feeds fixed synthetic cases through the actual Go engine; it does not receive company traffic, credentials, or provider requests. The API server therefore needs the Go toolchain available. The separate company-dashboard page remains a synthetic preview and is not connected to this endpoint.
 
-### Manually integrate with a Bifrost checkout
+### Native Bifrost shared-object integration
 
-This project is not a Bifrost source checkout, so the module lives in `plugins/fraudguard` and pins Bifrost's core API. From this project's root, the local overlay can be applied to a separate Bifrost checkout at the exact pinned commit:
+Bifrost's [Go-plugin guide](https://docs.getbifrost.ai/plugins/writing-go-plugin) documents custom plugins as Go shared objects (`.so`), and its [dynamic-build guide](https://docs.getbifrost.ai/plugins/building-dynamic-binary) explains that the default static executable cannot load them. FraudGuard now includes a `package main` adapter for Bifrost's loader; it exports the required `GetName` and `Cleanup` symbols and the LLM hooks, while forwarding evaluation to the existing observe-only module.
+
+For local integration with the pinned Bifrost checkout, run from this repository's root:
+
+```sh
+export BIFROST_ROOT=/path/to/bifrost
+bash plugins/fraudguard/scripts/prepare-pinned-bifrost-dynamic.sh --prepare
+make -C plugins/fraudguard build-shared BIFROST_ROOT="$BIFROST_ROOT"
+```
+
+The prepare command requires the exact inspected Bifrost commit. It copies the FraudGuard module into that separate checkout and adds local sibling-module replacements to `transports/go.mod`; it does not patch Bifrost's loader, commit, or push. The build command creates `generated-artifacts/fraudguard.so` and uses Bifrost's own shared-object loader to verify initial load, plugin reload cleanup, LLM-hook discovery, and unchanged request pass-through.
+
+Configure Bifrost's custom plugin entry with the generated file path:
+
+```json
+{
+  "name": "fraudguard",
+  "enabled": true,
+  "path": "/absolute/path/to/fraudguard.so",
+  "config": {
+    "alert_threshold": 60,
+    "warmup_requests": 5,
+    "enable_prompt_override_signals": false
+  }
+}
+```
+
+The Bifrost executable and `.so` must be built for the same OS, architecture, libc, and exact Go version (1.27.3 for the pinned source). Build Bifrost without `-extldflags '-static'` and without the `sqlite_static` build tag. Go plugins are supported on Linux and macOS, not Windows. Plugin AI review remains disabled unless a host-specific adapter is provided through a direct Go integration; a JSON config cannot inject callbacks.
+
+The Go loader caches a shared object per process. This adapter supports Bifrost's normal plugin reload lifecycle, but it is designed for one active FraudGuard configuration per Bifrost process; do not load the same `.so` as separate isolated instances in one process.
+
+### Alternative: direct source integration
+
+The module also implements `schemas.LLMPlugin` and can be registered directly through `core.Init` for Go SDK hosts. The separate source-overlay helper demonstrates adding it as a built-in plugin to a disposable, pinned Bifrost checkout:
 
 ```sh
 export BIFROST_ROOT=/path/to/bifrost
@@ -412,9 +445,7 @@ cd "$BIFROST_ROOT/transports"
 GOSUMDB=sum.golang.org go test -p 1 ./bifrost-http/server
 ```
 
-The script verifies the commit before copying the module, registering the built-in plugin name and loader, adding local sibling-module replacements, and formatting the touched Go files. `--apply` is required. It changes only that local checkout, refuses a different commit or a conflicting plugin directory, and never commits or pushes. Review `git diff` before using the result. The integration test checks the actual Bifrost loader and verifies that the hook returns the same request without short-circuiting.
-
-Applying this overlay is a local integration demonstration, not an upstream release. It does not mean the plugin is installed, accepted, or merged in the public Bifrost repository. Direct `core.Init` registration remains another supported integration path. If AI review is enabled, the host must supply an `AIAnalyzer` backed by its own isolated Bifrost model client.
+This is a different integration method from the documented `.so` loader. It edits only the specified local checkout and is not an upstream release or acceptance. Review `git diff` before using it.
 
 ### Containerized pinned-source smoke demo
 
@@ -424,9 +455,18 @@ From the project root, with Docker Engine and the Compose plugin installed:
 bash plugins/fraudguard/scripts/run-compose-demo.sh
 ```
 
-The script fetches Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` into an isolated temporary directory under the ignored `generated-artifacts/` folder, applies the local overlay only to that disposable checkout, builds a Bifrost image, and starts it with Redis and the local synthetic OpenAI-compatible mock provider. It does not edit a separate Bifrost checkout or push anything upstream. The synthetic virtual key is `sk-bf-fraudguard-local-demo`; the provider returns a fixed local response and never echoes or logs prompts. Use `Ctrl+C` to stop the demo; its temporary checkout and Compose containers are removed.
+The script fetches Bifrost commit `54ad3abec4fbbdaedf59414415094760fb9aa7e9` into an isolated temporary directory under the ignored `generated-artifacts/` folder. To avoid fetching the large source tree again, you can provide an existing clone at that exact commit:
+
+```sh
+FRAUDGUARD_BIFROST_CHECKOUT=/path/to/bifrost \
+  bash plugins/fraudguard/scripts/run-compose-demo.sh --smoke
+```
+
+With that option, the script creates and removes a temporary Git worktree; it does not change the supplied checkout. It prepares the disposable worktree, builds FraudGuard as a `.so` with the pinned Go toolchain, checks it using Bifrost's actual shared-object loader, then builds a dynamically linked Bifrost image and starts it with Redis and the local synthetic OpenAI-compatible mock provider. The demo uses local catalog fixtures for pricing, model parameters, and the MCP library, so the running stack does not need Bifrost's remote data feeds. Zero token rates in the fixture are only for the mock demo; they are not a provider price, a saving, or a revenue estimate. Building still requires the normal Go/npm dependencies. The synthetic virtual key is `sk-bf-fraudguard-local-demo`; the provider returns a fixed local response and never echoes or logs prompts. Without `--smoke`, use `Ctrl+C` to stop the interactive demo; with `--smoke`, the script runs checks and removes its temporary checkout and Compose containers automatically.
 
 Run `bash plugins/fraudguard/scripts/run-compose-demo.sh --smoke` for host-side readiness checks. Redis is checked by opening a raw TCP connection to `127.0.0.1:6379` (or the configured Redis host port), not with HTTP. The mock provider uses `GET /healthz`, and Bifrost uses `GET /health`. Smoke mode publishes ports on loopback, chooses an available Bifrost host port by default, and disables only the temporary Compose health checks; the script prints the assigned Bifrost URL.
+
+**Verified locally on 2026-11-14:** the full pinned-source Compose build produced the dynamic FraudGuard `.so` and Bifrost server. Redis TCP and mock-provider HTTP readiness passed; baseline and context-anomaly requests both returned HTTP 200, and the anomaly produced a sanitized FraudGuard alert in Bifrost logs. The requests remained observe-only, and the temporary stack was removed. This is a synthetic check against the pinned Bifrost commit, not evidence of production readiness or upstream acceptance.
 
 The local demo config sets Bifrost's `network_config.allow_private_network` only so it can reach the synthetic provider on the private Compose network. Do not copy this setting into a production config unless the operator has explicitly approved that private destination. Bifrost continues to block link-local destinations.
 

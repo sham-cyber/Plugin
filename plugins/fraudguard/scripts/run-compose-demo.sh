@@ -8,6 +8,26 @@ commit="54ad3abec4fbbdaedf59414415094760fb9aa7e9"
 mkdir -p "$workspace_root/generated-artifacts"
 source_root="$(mktemp -d "$workspace_root/generated-artifacts/fraudguard-bifrost-src.XXXXXX")"
 project_name="fraudguard-demo-$$"
+source_kind="temporary-clone"
+source_checkout="${FRAUDGUARD_BIFROST_CHECKOUT:-}"
+if [[ -n "$source_checkout" ]]; then
+  if [[ ! -d "$source_checkout" ]]; then
+    echo "FRAUDGUARD_BIFROST_CHECKOUT must be an existing Bifrost Git checkout." >&2
+    exit 2
+  fi
+  source_checkout="$(cd "$source_checkout" && pwd)"
+  if ! git -C "$source_checkout" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+    echo "FRAUDGUARD_BIFROST_CHECKOUT is not a Git checkout." >&2
+    exit 2
+  fi
+  rmdir "$source_root"
+  source_root="$workspace_root/generated-artifacts/fraudguard-bifrost-worktree-$$"
+  if [[ -e "$source_root" ]]; then
+    echo "Temporary Bifrost worktree path already exists: $source_root" >&2
+    exit 1
+  fi
+  source_kind="worktree"
+fi
 mode="${1:-}"
 redis_host_port="${FRAUDGUARD_REDIS_HOST_PORT:-6379}"
 mock_provider_host_port="${FRAUDGUARD_MOCK_PROVIDER_HOST_PORT:-19090}"
@@ -27,6 +47,7 @@ valid_port() {
 
 compose_args=(-f "$compose_file")
 compose_override=""
+shared_plugin_output="$workspace_root/generated-artifacts/fraudguard-compose-demo.so"
 if [[ "$mode" == "--smoke" ]]; then
   if ! valid_port "$redis_host_port" || ! valid_port "$mock_provider_host_port"; then
     echo "Readiness host ports must be integers between 1 and 65535." >&2
@@ -68,7 +89,12 @@ fi
 
 cleanup() {
   docker compose -p "$project_name" "${compose_args[@]}" down --remove-orphans --volumes >/dev/null 2>&1 || true
-  rm -rf "$source_root"
+  if [[ "$source_kind" == "worktree" ]]; then
+    git -C "$source_checkout" worktree remove --force "$source_root" >/dev/null 2>&1 || rm -rf "$source_root"
+  else
+    rm -rf "$source_root"
+  fi
+  rm -f "$shared_plugin_output"
   if [[ -n "$compose_override" ]]; then
     rm -f "$compose_override"
   fi
@@ -77,10 +103,22 @@ trap cleanup EXIT INT TERM
 
 command -v git >/dev/null || { echo "git is required" >&2; exit 1; }
 docker compose version >/dev/null
-git -C "$source_root" init -q
-git -C "$source_root" remote add origin https://github.com/maximhq/bifrost.git
-git -C "$source_root" fetch --depth=1 origin "$commit"
-git -C "$source_root" checkout -q --detach FETCH_HEAD
+if [[ "$source_kind" == "worktree" ]]; then
+  checkout_commit="$(git -C "$source_checkout" rev-parse HEAD)"
+  if [[ "$checkout_commit" != "$commit" ]]; then
+    echo "FRAUDGUARD_BIFROST_CHECKOUT must be at pinned commit $commit; found $checkout_commit." >&2
+    exit 1
+  fi
+  git -C "$source_checkout" worktree add -q --detach "$source_root" "$commit"
+  if [[ "$(git -C "$source_root" config --bool core.sparseCheckout || printf 'false')" == "true" ]]; then
+    git -C "$source_root" sparse-checkout add plugins ui
+  fi
+else
+  git -C "$source_root" init -q
+  git -C "$source_root" remote add origin https://github.com/maximhq/bifrost.git
+  git -C "$source_root" fetch --depth=1 origin "$commit"
+  git -C "$source_root" checkout -q --detach FETCH_HEAD
+fi
 
 actual="$(git -C "$source_root" rev-parse HEAD)"
 if [[ "$actual" != "$commit" ]]; then
@@ -88,13 +126,17 @@ if [[ "$actual" != "$commit" ]]; then
   exit 1
 fi
 
-# The integration script operates only on this disposable clone. It never
-# changes the user's checkout or the public upstream repository.
-BIFROST_ROOT="$source_root" bash "$module_dir/integration/apply-bifrost-integration.sh" --apply
+# Prepare only this disposable clone for the documented shared-object loader.
+# The script does not patch or modify the public upstream repository.
+BIFROST_ROOT="$source_root" bash "$module_dir/scripts/prepare-pinned-bifrost-dynamic.sh" --prepare
 export BIFROST_ROOT="$source_root"
 BIFROST_ROOT="$source_root" docker compose -p "$project_name" "${compose_args[@]}" config >/dev/null
 
-echo "Running the pinned Bifrost HTTP server plugin-loader test."
+echo "Building the native plugin with the pinned Bifrost modules and checking its .so loader."
+FRAUDGUARD_PLUGIN_OUTPUT="$shared_plugin_output" \
+  BIFROST_ROOT="$source_root" bash "$module_dir/scripts/build-shared-plugin.sh"
+
+echo "Checking the pinned Bifrost HTTP server package."
 (
   cd "$source_root/transports"
   GOSUMDB=sum.golang.org go test -p 1 ./bifrost-http/server
