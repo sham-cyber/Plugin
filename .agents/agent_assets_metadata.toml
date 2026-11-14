@@ -253,3 +253,17 @@ mtime_ms = 1794667306737
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/da58167a-f270-45e2-8d22-29cc2109a23e/95aea3e3-3749-4461-9df4-4fa124bd32cf"
 storage_version_token = "1794673345399215"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "7sZV2whQ1smdrxsaDXHQI"
+uri = "file://generated-artifacts/fraudguard-checksum.zip"
+type = "unspecified"
+title = "FraudGuard SHA-256 checksum download"
+description = "Download the ZIP and open the checksum file inside; use it to verify the plugin binary."
+logical_id = "a5d7be1f-cd75-48c8-8281-225c5c565f27"
+content_hash = "sha256:4805badfa61adb1ab32e6fcff1921bce887368b419f01ca4db4d52212e869103"
+size = 339
+mtime_ms = 1794675197595
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/a5d7be1f-cd75-48c8-8281-225c5c565f27/37afed33-d429-42e7-8868-38b95f349cee"
+storage_version_token = "1794675208286793"
+content_type = "application/octet-stream"
