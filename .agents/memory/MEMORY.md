@@ -7,3 +7,4 @@
 - [AshaRatna data flow](fraudguard-asha-integration.md) — use tenant-authorized Bifrost pull exports; keep public-rate cost estimates outside the plugin and counterfactual.
 - [FraudGuard Compose smoke checks](fraudguard-compose-smoke.md) — managed Docker health checks may fail at OCI exec; validate dependencies with host-side probes.
 - [Approval before project changes](fraudguard-approval-before-changes.md) — obtain the user's approval before changing project files or Git state, including commits, history edits, and pushes.
+- [GitHub release uploads](fraudguard-github-release-uploads.md) — the connector can create releases, but asset uploads need an authenticated route to uploads.github.com.
