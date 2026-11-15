@@ -7,17 +7,25 @@ function PulseLink({ label, plain = false }: { label: string; plain?: boolean })
       <svg className="heartbeat-wave-horizontal" viewBox="0 0 150 44" aria-hidden="true">
         <path className="heartbeat-wave-track" d="M2 22h146" />
         {plain ? (
-          <path className="heartbeat-wave-line" d="M2 22h136l10-7" />
+          <path className="heartbeat-wave-flow" d="M2 22h136l10-7" />
         ) : (
-          <path className="heartbeat-wave-line heartbeat-wave-pulse" d="M2 22h38l9 0 9-14 12 29 12-22 9 7h59" />
+          <>
+            <path className="heartbeat-wave-flow" d="M2 22h146" />
+            <path className="heartbeat-wave-signal" d="M2 22h38l9 0 9-14 12 29 12-22 9 7h59" />
+            <path className="heartbeat-wave-pulse" d="M2 22h38l9 0 9-14 12 29 12-22 9 7h59" />
+          </>
         )}
       </svg>
       <svg className="heartbeat-wave-vertical" viewBox="0 0 36 64" aria-hidden="true">
         <path className="heartbeat-wave-track" d="M18 1v62" />
         {plain ? (
-          <path className="heartbeat-wave-line" d="M18 1v62" />
+          <path className="heartbeat-wave-flow" d="M18 1v62" />
         ) : (
-          <path className="heartbeat-wave-line heartbeat-wave-pulse" d="M18 1v15l-9 8 18 9-9 10v20" />
+          <>
+            <path className="heartbeat-wave-flow" d="M18 1v62" />
+            <path className="heartbeat-wave-signal" d="M18 1v15l-9 8 18 9-9 10v20" />
+            <path className="heartbeat-wave-pulse" d="M18 1v15l-9 8 18 9-9 10v20" />
+          </>
         )}
       </svg>
     </div>
@@ -82,6 +90,11 @@ export function BehaviorHeartbeat() {
           </article>
         </div>
 
+        <div className="heartbeat-wave-legend" aria-label="Request flow legend">
+          <span><i aria-hidden="true" />Green: request flow</span>
+          <span><i className="heartbeat-legend-signal" aria-hidden="true" />Red pulse: behavior signal</span>
+        </div>
+
         <div className="heartbeat-output-label">
           <span className="heartbeat-output-rule" aria-hidden="true" />
           <span>Payload-free finding · request path is not changed</span>
@@ -94,7 +107,10 @@ export function BehaviorHeartbeat() {
               <span className="heartbeat-analytics-kicker">WHAT THE PLUGIN REPORTS</span>
               <h3>One small change in the activity pattern.</h3>
             </div>
-            <span className="heartbeat-synthetic-label">ACTUAL GO ENGINE · SYNTHETIC INPUTS</span>
+            <div className="heartbeat-data-status">
+              <span className="heartbeat-live-label">LIVE VIEW REQUIRES A CONNECTED SOURCE</span>
+              <span className="heartbeat-synthetic-label">DEMO · SYNTHETIC INPUTS</span>
+            </div>
           </div>
 
           <div className="heartbeat-metrics" aria-label="Synthetic demo analytics">
@@ -121,8 +137,9 @@ export function BehaviorHeartbeat() {
           </div>
 
           <p className="heartbeat-footnote">
-            This snapshot uses the checked-in Go demo output, not company traffic. The person icon
-            marks a request source; no personal identity is shown or collected here.
+            Live company analytics will appear only after an authenticated gateway data source is
+            configured. No live source is connected here, so this uses the Go demo output. The
+            person icon marks a request source; no personal identity is shown or collected.
           </p>
         </div>
       </div>
