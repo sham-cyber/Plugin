@@ -295,3 +295,17 @@ mtime_ms = 1794732078947
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/ee7d5df6-8253-4a9a-a789-edc52fa28cce/706990d7-99d0-4220-b352-42c7df393d1a"
 storage_version_token = "1794732130606751"
 content_type = "image/png"
+
+[[outputs]]
+id = "-JU-bBYgHe-hvHk_Vk-O4"
+uri = "file://generated-artifacts/AshaRatna-Tech-AI-Fraud-Guard.gif"
+type = "image"
+title = "AshaRatna Tech AI Fraud Guard"
+description = "Looping 1920 × 1080 GIF with moving green request dots and a red behavior pulse; 20 frames, 1.6-second loop."
+logical_id = "5ae02c10-c648-4f60-b293-53535097919e"
+content_hash = "sha256:ab650d06fa75bf8dc75ef0dcb0ede01b3e354a3189f4bd74e8ab75ec167ac842"
+size = 266334
+mtime_ms = 1794732436959
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/5ae02c10-c648-4f60-b293-53535097919e/37670469-e164-4f14-8cb7-a1e115c4a8ba"
+storage_version_token = "1794732566069679"
+content_type = "image/gif"
