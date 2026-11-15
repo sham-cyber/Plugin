@@ -4,6 +4,8 @@ This is a hackathon project: an observe-only Go plugin for Bifrost, with a synth
 
 **Live demo:** [https://bifrost-fraud-detection-plugin.replit.app](https://bifrost-fraud-detection-plugin.replit.app) — Public synthetic demo page; it is not connected to live customer data or a production Bifrost deployment.
 
+**AI-enabled Linux plugin bundle:** [Download ZIP](https://raw.githubusercontent.com/sham-cyber/Plugin/main/release-assets/fraudguard-bifrost-linux-amd64-54ad3ab-ai-review.zip) · [Verify ZIP checksum](https://raw.githubusercontent.com/sham-cyber/Plugin/main/release-assets/fraudguard-bifrost-linux-amd64-54ad3ab-ai-review.zip.sha256). The AI review remains off until the host configures the Bifrost endpoint and dedicated service key.
+
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
 ## Hackathon problem, solution, and verification
