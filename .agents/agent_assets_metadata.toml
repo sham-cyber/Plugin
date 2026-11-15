@@ -351,3 +351,17 @@ mtime_ms = 1794752707354
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/0a15b4d9-33a4-4eea-b8fc-894ea1568423/3654368a-a7a0-4f2a-8672-ed4cccc2fade"
 storage_version_token = "1794752735431089"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "AVB2n_TfR763pgh-_h7-J"
+uri = "file://FRAUDGUARD_V2_EVENT_CONTRACT.md"
+type = "text"
+title = "FraudGuard v2 Event Contract"
+description = "Exact receiver contract for the Brief agent: routes, event fields, enums, validation limits, responses, idempotency, scoring behavior, and current integration limits."
+logical_id = "b86d57e2-6365-424c-88be-ac34e98d5f2b"
+content_hash = "sha256:a5ac6513faa8e99c85901ae76d185e92ce6d96683df5054ec7231ba8a3b69568"
+size = 7881
+mtime_ms = 1794754826942
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/b86d57e2-6365-424c-88be-ac34e98d5f2b/ffdd2d00-97dd-4768-bb52-8c21d74477d6"
+storage_version_token = "1794754846850703"
+content_type = "text/markdown"
