@@ -52,7 +52,8 @@ For `citation_guardrail`, also send `validation_outcome` with the same value as
 For `operation: "model_summary"`:
 
 - `provider` and `model` are required. Each is 1–64 characters and must match
-  `[A-Za-z0-9][A-Za-z0-9._/-]*`.
+  `[A-Za-z0-9][A-Za-z0-9._:/-]*`; colons are allowed for standard Ollama
+  model tags such as `qwen3:0.6b`.
 - Terminal events (`completion`, `failure`, `cancellation`) require
   `duration_ms` from 0 through 600,000.
 - Terminal events require `token_count_source`:

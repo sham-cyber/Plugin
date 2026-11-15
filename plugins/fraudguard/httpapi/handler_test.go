@@ -139,6 +139,24 @@ func TestEventsAcceptModelAndTavilyFixtures(t *testing.T) {
 	}
 }
 
+func TestEventsAcceptStandardOllamaModelTags(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	var input EventRequest
+	if err := json.Unmarshal(eventFixture(t, "model_completion.json"), &input); err != nil {
+		t.Fatal(err)
+	}
+	input.EventID = "ollama-tag-event"
+	input.Model = "ollama/qwen3:0.6b"
+	body, err := json.Marshal(input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := postEvent(handler, body, testAPIKey)
+	if response.Code != http.StatusAccepted {
+		t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+	}
+}
+
 func TestEventsAcknowledgeLifecycleAndGuardrailWithoutScoring(t *testing.T) {
 	handler := newTestHandler(t, 100)
 	for _, body := range [][]byte{
