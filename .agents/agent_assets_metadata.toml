@@ -281,3 +281,17 @@ mtime_ms = 1794677386846
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/564f991d-5d2c-4a5d-b969-51a855e04fbb/f06e5dcd-67e4-4a5a-a491-8ddb7c188b51"
 storage_version_token = "1794686629377266"
 content_type = "application/octet-stream"
+
+[[outputs]]
+id = "SrYUdCzlF9Q1rPG030yKE"
+uri = "file://generated-artifacts/fraudguard-linkedin-post.png"
+type = "image"
+title = "FraudGuard LinkedIn post graphic"
+description = "A 1080 × 1350 portrait image focused on the Bifrost flow and synthetic demo metrics."
+logical_id = "ee7d5df6-8253-4a9a-a789-edc52fa28cce"
+content_hash = "sha256:43a9781ca4f63b2003878443aa17da254195174823d4fc7ee362a8b89d82626c"
+size = 168487
+mtime_ms = 1794731616647
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/ee7d5df6-8253-4a9a-a789-edc52fa28cce/78188a8e-339c-4745-ba5a-55ce65b920d3"
+storage_version_token = "1794731658297681"
+content_type = "image/png"
