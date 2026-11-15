@@ -323,3 +323,17 @@ mtime_ms = 1794733428875
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/8ac945da-e80a-477c-8ef8-2660e083f23c/adb8019f-e5c2-47c2-bd7e-0488bd008271"
 storage_version_token = "1794734050517909"
 content_type = "text/html"
+
+[[outputs]]
+id = "bRhKD5LXJssmlh-yurNLV"
+uri = "file://BRIEF_AI_AGENT_EVENT.md"
+type = "text"
+title = "Brief AI Agent Handoff"
+description = "Download this Markdown file and upload it to the Brief project agent."
+logical_id = "4fa646c9-4a98-4c25-8403-37ef3ac98456"
+content_hash = "sha256:4793fcca734482e739aae414aa5692fb2c3ab2a68c0e05506619f7af7b9016fd"
+size = 4291
+mtime_ms = 1794743339514
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4fa646c9-4a98-4c25-8403-37ef3ac98456/a30f8172-0f1a-4a6c-906e-13b79be99278"
+storage_version_token = "1794743897781777"
+content_type = "text/markdown"
