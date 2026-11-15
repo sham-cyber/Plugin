@@ -337,3 +337,17 @@ mtime_ms = 1794743339514
 storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/4fa646c9-4a98-4c25-8403-37ef3ac98456/a30f8172-0f1a-4a6c-906e-13b79be99278"
 storage_version_token = "1794743897781777"
 content_type = "text/markdown"
+
+[[outputs]]
+id = "oaj6wwBRUOa4ccsqD0_Ff"
+uri = "file://BRIEF_FRAUDGUARD_EVENT_SYNC.md"
+type = "text"
+title = "Brief FraudGuard Event Sync"
+description = "Download and upload this coordination note to the Brief agent. It covers Tavily scope, the current API limits, privacy, and the next verification step."
+logical_id = "0a15b4d9-33a4-4eea-b8fc-894ea1568423"
+content_hash = "sha256:0799ebec5049f8f41cebf2002e224a0e3ffb19a0ea1d8869c294c736ae690c30"
+size = 1601
+mtime_ms = 1794752707354
+storage_uri = "gcs://replit-rams-assets-sisko/rams/assets/repl:2b966bc1-e021-47ad-8750-064a27bb6f81/0a15b4d9-33a4-4eea-b8fc-894ea1568423/3654368a-a7a0-4f2a-8672-ed4cccc2fade"
+storage_version_token = "1794752735431089"
+content_type = "text/markdown"
