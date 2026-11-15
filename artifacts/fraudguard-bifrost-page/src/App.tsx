@@ -5,6 +5,7 @@ import {
 } from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
+import { BehaviorHeartbeat } from '@/components/behavior-heartbeat';
 import { Toaster } from '@/components/ui/toaster';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import NotFound from '@/pages/not-found';
@@ -239,6 +240,8 @@ function Home() {
           <article className="flow-step"><b>04 / REVIEW</b><h3>Your sink, your call</h3><p>Forward structured findings to an operator-owned audit or review pipeline.</p></article>
         </div>
       </section>
+
+      <BehaviorHeartbeat />
 
       <section className="section demo-section" id="demo">
         <div className="demo-intro">
