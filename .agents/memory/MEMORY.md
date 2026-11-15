@@ -2,10 +2,11 @@
 - [Bifrost monorepo builds](bifrost-monorepo-build.md) — use local sibling-module replacements when published modules lag the checked-out source.
 - [FraudGuard buyer model](fraudguard-buyer-model.md) — target global AI gateway operators; Finolex figures are context, not assumed customers or API-key volume.
 - [FraudGuard API-key provision](fraudguard-api-key-provision.md) — the user expects API keys to be provided for the plugin; clarify their type and destination before implementation.
-- [FraudGuard production hardening](fraudguard-hackathon-focus.md) — preserve observe-only handling; prompt checks stay opt-in and transient, and live production requires gateway integration and validation.
+- [FraudGuard production hardening](fraudguard-hackathon-focus.md) — keep observe-only, prompt checks opt-in/transient, and require real integration validation before production.
 - [FraudGuard host-model review](fraudguard-host-model-review.md) — optional AI review uses the host's Bifrost model and stays asynchronous, sanitized, and advisory.
 - [FraudGuard hot-path benchmarks](fraudguard-hot-path-benchmarks.md) — keep bounded history eviction allocation-light and report engine benchmarks separately from end-to-end gateway latency.
 - [AshaRatna data flow](fraudguard-asha-integration.md) — use tenant-authorized Bifrost pull exports; keep public-rate cost estimates outside the plugin and counterfactual.
 - [FraudGuard Compose smoke checks](fraudguard-compose-smoke.md) — managed Docker health checks may fail at OCI exec; validate dependencies with host-side probes.
 - [Approval before project changes](fraudguard-approval-before-changes.md) — obtain the user's approval before changing project files or Git state, including commits, history edits, and pushes.
 - [GitHub release uploads](fraudguard-github-release-uploads.md) — the connector can create releases, but asset uploads need an authenticated route to uploads.github.com.
+- [Brief event scope](brief-event-scope.md) — cover Brief's default Ollama/Qwen and optional Bifrost summaries, plus Tavily; Bifrost is not required.

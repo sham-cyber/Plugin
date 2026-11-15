@@ -18,7 +18,7 @@ These are connected components in separate repositories, not one merged applicat
 
 FraudGuard now has a versioned `POST /api/v2/events` contract for `model_summary` and `tavily_search` events; the existing `/api/v1/score` route remains unchanged. Terminal model and Tavily events receive observe-only scores. Start and citation/guardrail events are acknowledged but not retained as event history, and Tavily duration/result counts are not yet scoring signals. See the [v2 event contract and limits](plugins/fraudguard/README.md#versioned-host-event-api).
 
-**Integration status:** the Brief-side FraudGuard bridge is a local, disabled change and has not been committed to the Brief repository or live-tested against this receiver. It currently needs to be aligned with the v2 contract; the Tavily event hook also remains to be added. Until a non-production endpoint and server-side secrets are configured, there is no live Brief-to-FraudGuard data flow. The earlier [Brief commit](https://github.com/sham-cyber/Brief/commit/692cb99fc276bd689543bae2636ff55dc0c0c84b) covers optional Bifrost routing and mocked tests only; it is not evidence of live FraudGuard integration.
+**Integration status:** the local Brief checkout now has a disabled-by-default v2 sender at its shared summary path (Ollama or optional Bifrost) and Tavily path. A loopback-only trial sent nine synthetic events to the receiver; all were accepted with zero drops. No live provider or Tavily request was made, and no production endpoint is deployed. The Brief changes remain local and unpushed. The earlier [Brief commit](https://github.com/sham-cyber/Brief/commit/692cb99fc276bd689543bae2636ff55dc0c0c84b) covers optional Bifrost routing only; it is not evidence of live FraudGuard integration.
 
 The shared virtual key in the first Bifrost route represents Brief's app-level traffic, not separate profiles for each Brief member. Findings remain observe-only, and Brief does not yet display FraudGuard findings in its UI. The integration is in separate repositories and does not add FraudGuard to upstream Bifrost.
 
@@ -137,7 +137,7 @@ The demo uses synthetic requests, payment events, and trusted key-status flags. 
 
 ### Run the standalone scoring API
 
-FraudGuard also has a separate, observe-only HTTP service for server-side integrations. It does not alter the Bifrost plugin. The Brief-side bridge remains local and disabled; this service is not deployed as a public endpoint. See the [API setup and security notes](plugins/fraudguard/README.md#standalone-metadata-scoring-api).
+FraudGuard also has a separate, observe-only HTTP service for server-side integrations. It does not alter the Bifrost plugin. Brief's local sender now matches the v2 event contract and passed a synthetic loopback trial, but remains disabled by default; this service is not deployed as a public endpoint. See the [API setup and security notes](plugins/fraudguard/README.md#standalone-metadata-scoring-api).
 
 From `plugins/fraudguard`, configure `FRAUDGUARD_API_KEY_HASHES` as `sha256hex=opaque-tenant-reference`, then run `make api`. The service binds to `127.0.0.1:8787` by default. It accepts metadata-only `POST /api/v1/score` and versioned `POST /api/v2/events` requests with a bearer key and returns advisory 0–100 findings for supported terminal events. It rejects prompt/payload fields, stores behavior profiles only in memory, and never blocks requests. Public deployment requires HTTPS termination and an operator-managed key provisioning process; those are not included.
 
@@ -156,7 +156,7 @@ The separate source-overlay helper is an optional alternative and edits only the
 ## Implementation
 
 - A Go adapter implements Bifrost's `schemas.LLMPlugin` hooks. It reads the authenticated internal virtual-key ID supplied by Bifrost; it does not use IP headers as identity.
-- A separately runnable Go HTTP API accepts authenticated, metadata-only score and typed event submissions from trusted server-side applications. It shares the scoring engine but is not mounted into Bifrost's HTTP server. Brief's bridge is local, disabled, and not yet live-connected to it.
+- A separately runnable Go HTTP API accepts authenticated, metadata-only score and typed event submissions from trusted server-side applications. It shares the scoring engine but is not mounted into Bifrost's HTTP server. Brief's local sender uses the v2 contract; live delivery is still off and has not been tested against a deployed endpoint.
 - A bounded, process-local rolling profile compares model/provider use, request timing, token volume, and outcomes after warmup.
 - Explainable signals produce a deterministic 0–100 score and threshold alert. The plugin is observe-only: it does not block or alter requests.
 - Startup configuration checks and validated build metadata are exposed through authenticated health/admin JSON; the checks never read or emit secret values.

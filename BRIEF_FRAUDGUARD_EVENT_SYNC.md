@@ -1,31 +1,20 @@
-# Brief ↔ FraudGuard Event Contract Sync
+# Brief ↔ FraudGuard Event Sync
 
-Thanks. Agreed—we should include Tavily search/retrieval as well as Ollama
-and Bifrost model summaries.
+## Reply for Brief
 
-I checked the current FraudGuard `POST /api/v1/score` handler. It strictly
-accepts completed model events with `event_id`, `profile_ref`, `provider`,
-`model`, `timestamp`, token counts, and `failed`. It cannot currently represent
-separate lifecycle events, citation/guardrail outcomes, or Tavily search
-events. Sending those fields to the current endpoint would be rejected or
-misrepresented.
+> Thanks. Brief's local API checkout now sends FraudGuard v2 events from the shared AI-summary path, so both its normal Ollama/Qwen provider and its optional Bifrost provider are covered. Tavily search sends separate metadata-only events.
+>
+> Events are sent asynchronously through a bounded, fail-open queue. Account references are HMAC-pseudonymized. Prompts, questions, search queries, URLs, source text, PINs, and provider credentials are excluded. `/api/healthz` reports whether delivery is enabled and the pending and dropped event counts.
+>
+> We ran a loopback-only end-to-end trial with synthetic provider responses and synthetic Tavily results. The FraudGuard v2 receiver accepted all nine events with HTTP 202 and zero drops. No live Ollama, Bifrost, or Tavily request was made. The sender remains disabled by default; no public/non-production endpoint is deployed, and no live events have been sent.
+>
+> Start and citation/guardrail events are acknowledged but not scored or retained by the current receiver. Tavily duration and result counts are accepted but are not scoring signals. Please keep `FRAUDGUARD_ENABLED` off until a non-production endpoint and server-side credentials are configured; then we can repeat the test against that endpoint and confirm Brief's user-facing response is unchanged.
 
-Before changing Brief, please confirm a versioned event contract for:
+## Implementation and verification notes
 
-- Event/attempt ID, opaque pseudonymous profile reference, operation, event
-  type, and timestamp.
-- Start, completion, failure, cancellation, and citation/guardrail outcomes.
-- Tavily search/retrieval duration, result count, and safe validation outcome.
-  Never include the search query, URLs, or source content.
-- Model provider/model, status, and token counts explicitly marked as
-  provider-reported, estimated, or unavailable.
-
-Keep the existing score endpoint backward-compatible if possible. Keep event
-delivery asynchronous and fail-open, and make dropped-event counts observable.
-Do not send prompts, source text, PINs, credentials, or identifying account
-values. Keep credentials in server-side Secrets.
-
-Once the receiver schema and response are agreed and tested, Brief can add the
-Tavily hook and align its model-provider events. Then run a non-production
-live test and confirm Brief's response is unchanged. No follow-up code changes
-are requested before that agreement.
+- Brief's shared AI summary function emits start, completion, failure, cancellation, and citation/guardrail outcomes for Ollama and optional Bifrost.
+- Brief's Tavily search function emits lifecycle events, duration, result count, and the safe response-envelope validation outcome. It sends no query, URL, or result content.
+- The sender uses `FRAUDGUARD_ENABLED=false` by default, requires a server-side client key and a separate HMAC key, accepts HTTPS endpoints (or loopback HTTP in development), and never makes delivery part of the AI response path.
+- Local checks: 47 AI/event tests, 7 briefing tests, 9 SAP tests, API typecheck and build, and the FraudGuard Go module test suite passed.
+- Local receiver trial: nine synthetic events from Ollama, Bifrost, and Tavily hooks returned HTTP 202; pending and dropped counts ended at zero.
+- The Brief checkout changes are local only and have not been committed or pushed. The trial did not use customer data or contact a live AI/search provider.

@@ -1,52 +1,52 @@
-# Brief AI Agent Handoff: Use Workspace AI Through Bifrost
+# Brief ↔ FraudGuard Event Handoff
 
-**Purpose:** Give the Brief project agent a clear task to verify and finish the live Brief → Bifrost → FraudGuard path, without adding provider keys to source control.
+## Correct architecture
 
-## Current status
+Brief normally generates Qwen 3:0.6b summaries through Ollama. Bifrost is an
+optional summary provider, not a required hop. FraudGuard event reporting is
+attached to Brief's shared summary flow, so it can observe either provider.
+Tavily search is a separate direct retrieval path and emits its own minimized
+events.
 
-- The Brief repository already has an optional Bifrost route for Qwen summaries. It was published in [this Brief commit](https://github.com/sham-cyber/Brief/commit/692cb99fc276bd689543bae2636ff55dc0c0c84b).
-- The route sends summaries to Bifrost's OpenAI-compatible `/v1/chat/completions` endpoint with the server-side `x-bf-vk` virtual-key header.
-- Tavily search remains direct. Ollama remains the default unless the Brief server is configured for Bifrost.
-- No live Bifrost address or virtual key has been configured or tested yet.
-- The owner reports that the Replit workspace has working AI, but the Brief repository does not contain AI provider keys.
+This is an event feed, not a proxy. Brief sends metadata to FraudGuard's
+standalone `POST /api/v2/events` endpoint; the endpoint does not inspect prompts,
+search queries, URLs, source text, PINs, or provider credentials, and it cannot
+block or change Brief's response.
 
-## Important distinction
+## Current local implementation
 
-`BIFROST_VIRTUAL_KEY` is a key that authorizes Brief to use a Bifrost gateway. It is **not** an AI provider API key. Bifrost must already be configured to reach the model. A local Qwen/Ollama model may not need a provider API key.
+- Model events cover start, completion, failure, cancellation, and citation /
+  guardrail outcomes for both Ollama and optional Bifrost summaries.
+- Tavily events cover lifecycle, duration, result count, and safe response
+  envelope validation. Queries, URLs, and result contents are excluded.
+- Account references are HMAC-pseudonymized. A bounded background queue sends
+  events asynchronously and fail-open; `/api/healthz` reports enabled state,
+  pending events, and dropped events.
+- Delivery is disabled by default. `FRAUDGUARD_ENABLED=true`, a full
+  `FRAUDGUARD_API_URL`, `FRAUDGUARD_CLIENT_KEY`, and a separate
+  `FRAUDGUARD_PROFILE_HMAC_KEY` are required in server-side Secrets.
+- A synthetic loopback trial sent nine events from the Ollama, Bifrost, and
+  Tavily hooks to the local receiver. All were accepted with HTTP 202 and zero
+  drops. No external model or Tavily request was made.
+- The Brief changes are local and unpushed. There is no deployed
+  non-production FraudGuard endpoint or live event flow.
 
-Do not assume that an AI model available to the Replit Agent is automatically callable by the Brief API server. First check whether the workspace's configured AI integration is available to server-side Brief code. Keep all credentials in Replit Secrets or the approved integration flow; never put secrets in source, logs, screenshots, or Git.
+## Receiver limitations
 
-## Task for the Brief project agent
+The current receiver scores terminal model and Tavily events. Start and
+citation/guardrail events are acknowledged but not scored or retained.
+Tavily duration and result counts are accepted but are not scoring signals.
+Do not describe these as full lifecycle history or Tavily anomaly detection.
 
-Inspect the current Brief `main` branch and finish the real runtime configuration for this route:
+## Safe next live test
 
-1. Review the existing Bifrost provider code and tests before editing. Avoid building a duplicate adapter.
-2. Identify how the working AI in this Replit workspace is exposed to the **Brief API server**. Confirm whether Bifrost can route to that model. Do not invent an endpoint or assume the Agent's own AI is available to the deployed app.
-3. Keep the intended request path: **Brief → Bifrost → FraudGuard → configured model**. Do not send monitored Qwen requests directly to a separate AI service, because that would bypass FraudGuard.
-4. If the workspace AI cannot be reached through Bifrost, report the exact blocker and the supported alternative before changing the architecture.
-5. Keep Tavily search separate and preserve the current Ollama default. When Bifrost mode is selected, gateway failure must leave the source-based brief available; it must not silently fall back to a direct model call.
-6. Configure the Bifrost URL, model name, and virtual key only through server-side environment/secrets. Keep user activation and per-brief opt-in in place.
-7. Keep FraudGuard observe-only. Do not block, alter, or delay user requests based on a finding.
-8. Add or update tests for configuration, virtual-key header handling, missing gateway configuration, source-only fallback, and request cancellation. Use synthetic test data.
-9. Run the Brief API tests and type checks. Run a live test only against an explicitly configured non-production Bifrost gateway; do not claim a live integration test if only mocks ran.
-10. Update the Brief README with the actual setup and verification results, then commit and push the verified Brief changes to `sham-cyber/Brief` `main`. Do not add or enable GitHub Actions as part of this task.
-
-## Expected server configuration
-
-Use the actual model ID returned by the configured Bifrost gateway's model list. These are names only; put the virtual key value in the server's secret manager, not this file:
-
-```text
-BRIEF_AI_PROVIDER=bifrost
-BIFROST_BASE_URL=https://<configured-bifrost-host>
-BIFROST_MODEL=<model-id-visible-to-the-virtual-key>
-BIFROST_VIRTUAL_KEY=<server-side-bifrost-virtual-key>
-```
-
-Before enabling this in a shared deployment, confirm the Bifrost virtual key is restricted to the intended model and that the FraudGuard plugin is loaded in that Bifrost server.
-
-## What to report back
-
-- Whether the workspace AI is actually callable from the Brief API server and routable through Bifrost.
-- Which configuration was added, without revealing secret values.
-- Exact tests/builds run and whether they used mocks or a live test gateway.
-- The Brief commit link after a successful push.
+1. Deploy a non-production FraudGuard receiver with HTTPS and an independent
+   client key.
+2. Put the endpoint, client key, and HMAC key in Brief's server-side Secrets.
+3. Keep delivery disabled until those settings are reviewed; then enable it
+   only in the non-production environment.
+4. Send synthetic Brief requests through Ollama and optional Bifrost, plus a
+   synthetic Tavily search. Confirm accepted events, zero unexpected drops,
+   and unchanged Brief responses.
+5. Keep GitHub Actions unchanged and do not push until the repository owner
+   explicitly requests it.
