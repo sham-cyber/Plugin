@@ -2,7 +2,7 @@ GO ?= go
 GOSUMDB ?= sum.golang.org
 FUZZTIME ?= 3s
 
-.PHONY: help fraudguard-build fraudguard-test fraudguard-race fraudguard-vet fraudguard-fuzz-smoke fraudguard-chaos fraudguard-demo fraudguard-compose-demo fraudguard-load-test fraudguard-integration fraudguard-sanity fraudguard-verify fraudguard-release-preflight
+.PHONY: help fraudguard-build fraudguard-test fraudguard-race fraudguard-vet fraudguard-fuzz-smoke fraudguard-chaos fraudguard-demo fraudguard-api fraudguard-compose-demo fraudguard-load-test fraudguard-integration fraudguard-sanity fraudguard-verify fraudguard-release-preflight
 
 help:
 	@printf '%s\n' \
@@ -14,6 +14,7 @@ help:
 		'  make fraudguard-fuzz-smoke     Run bounded local Go fuzz checks' \
 		'  make fraudguard-chaos          Run Redis-outage and slow-service fault tests' \
 		'  make fraudguard-demo           Run the local synthetic observe-only demo' \
+		'  make fraudguard-api            Run the standalone metadata scoring API' \
 		'  make fraudguard-compose-demo   Run the disposable pinned-Bifrost Docker demo' \
 		'  make fraudguard-load-test      Run the localhost-only k6 gateway test' \
 		'  make fraudguard-integration    Check against BIFROST_ROOT' \
@@ -41,6 +42,9 @@ fraudguard-chaos:
 
 fraudguard-demo:
 	$(MAKE) -C plugins/fraudguard demo GO="$(GO)" GOSUMDB="$(GOSUMDB)"
+
+fraudguard-api:
+	$(MAKE) -C plugins/fraudguard api GO="$(GO)" GOSUMDB="$(GOSUMDB)"
 
 fraudguard-compose-demo:
 	bash plugins/fraudguard/scripts/demo_walkthrough.sh --compose

@@ -121,6 +121,12 @@ go run ./cmd/demo
 
 The demo uses synthetic requests, payment events, and trusted key-status flags. It does not contact an LLM provider or payment service. Go may download module dependencies the first time you run these commands.
 
+### Run the standalone scoring API
+
+FraudGuard also has a separate, observe-only HTTP service for server-side integrations. It does not alter the Bifrost plugin and is not wired into the public Brief application or deployed as a public endpoint yet. See the [API setup and security notes](plugins/fraudguard/README.md#standalone-metadata-scoring-api).
+
+From `plugins/fraudguard`, configure `FRAUDGUARD_API_KEY_HASHES` as `sha256hex=opaque-tenant-reference`, then run `make api`. The service binds to `127.0.0.1:8787` by default. It accepts metadata-only `POST /api/v1/score` requests with a bearer key and returns an advisory 0–100 finding. It rejects prompt/payload fields, stores profiles only in memory, and never blocks requests. Public deployment requires HTTPS termination and an operator-managed key provisioning process; those are not included.
+
 From the repository root, `make help` lists convenient FraudGuard targets, including `make fraudguard-test`, `make fraudguard-chaos`, `make fraudguard-demo`, `make fraudguard-compose-demo`, and `make fraudguard-load-test`.
 
 ### Load the native plugin in a pinned Bifrost checkout
@@ -136,6 +142,7 @@ The separate source-overlay helper is an optional alternative and edits only the
 ## Implementation
 
 - A Go adapter implements Bifrost's `schemas.LLMPlugin` hooks. It reads the authenticated internal virtual-key ID supplied by Bifrost; it does not use IP headers as identity.
+- A separately runnable Go HTTP API accepts authenticated, metadata-only score events from trusted server-side applications. It shares the scoring engine but is not mounted into Bifrost's HTTP server and is not yet connected to Brief.
 - A bounded, process-local rolling profile compares model/provider use, request timing, token volume, and outcomes after warmup.
 - Explainable signals produce a deterministic 0–100 score and threshold alert. The plugin is observe-only: it does not block or alter requests.
 - Startup configuration checks and validated build metadata are exposed through authenticated health/admin JSON; the checks never read or emit secret values.

@@ -11,7 +11,7 @@ $(warning GOSUMDB=off disables public module checksum verification; using sum.go
 override GOSUMDB = sum.golang.org
 endif
 
-.PHONY: help setup build build-shared test race vet bench fuzz-smoke demo simulate chaos redis-check integration sanity verify
+.PHONY: help setup build build-shared test race vet bench fuzz-smoke demo api simulate chaos redis-check integration sanity verify
 
 help:
 	@printf '%s\n' \
@@ -25,6 +25,7 @@ help:
 		'  make bench        Run local detector/guard benchmarks' \
 	'  make fuzz-smoke   Run bounded local Go fuzz checks' \
 		'  make demo         Run synthetic observe-only examples' \
+		'  make api          Run the standalone observe-only metadata API' \
 		'  make chaos        Run local Redis/slow-service fault tests' \
 		'  make redis-check  Ping FRAUDGUARD_REDIS_URL without printing it' \
 		'  make integration Verify against the pinned Bifrost source (set BIFROST_ROOT)' \
@@ -58,6 +59,9 @@ fuzz-smoke:
 
 demo:
 	GOSUMDB=$(GOSUMDB) $(GO) run ./cmd/demo
+
+api:
+	GOSUMDB=$(GOSUMDB) $(GO) run ./cmd/http-api
 
 simulate: demo
 

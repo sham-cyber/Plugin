@@ -133,6 +133,57 @@ The HMAC key is randomly generated per engine process. It is not persisted or em
 
 Registering the plugin in `schemas.BifrostConfig.LLMPlugins` enables it. Prompt inspection, custom prompt rules, payment checks, key-status checks, cross-key correlation, and AI review are separate opt-ins and default off.
 
+## Standalone metadata scoring API
+
+The module also includes a small Go HTTP service for trusted host applications such as Brief. It uses the same behavior engine but runs as a separate process; it does not modify Bifrost's server or Brief's source code, and it is not automatically deployed as a public service.
+
+The service accepts only completed-request metadata at `POST /api/v1/score`. Its strict JSON schema is:
+
+```json
+{
+  "event_id": "evt-unique-001",
+  "profile_ref": "opaque-profile-7",
+  "provider": "ollama",
+  "model": "qwen3-0.6b",
+  "timestamp": "2026-11-15T11:00:00Z",
+  "input_tokens": 120,
+  "output_tokens": 64,
+  "failed": false
+}
+```
+
+Send it with `Authorization: Bearer <FraudGuard API key>` and `Content-Type: application/json`. The response contains a schema version, event ID, 0–100 score, threshold, warmup/alert flags, named signals, and `enforcement: "observe_only"`. The endpoint never blocks or changes the AI request. Prompt, response, API key, and provider credentials are not accepted fields. Unknown fields are rejected.
+
+### Local setup
+
+Use a high-entropy API key on the client, and configure only its SHA-256 digest in the service. Map each digest to a tenant reference that is not a company name, email, or credential:
+
+```sh
+cd plugins/fraudguard
+export FG_CLIENT_KEY="$(openssl rand -hex 32)"
+printf 'Local demo client key (keep private): %s\n' "$FG_CLIENT_KEY"
+export FRAUDGUARD_API_KEY_HASHES="$(printf %s "$FG_CLIENT_KEY" | sha256sum | awk '{print $1}')=demo-tenant"
+export FRAUDGUARD_API_LISTEN=127.0.0.1:8787
+make api
+```
+
+Keep the server running. In a second terminal, set `FG_CLIENT_KEY` to the local demo key shown by the first terminal, then call the endpoint:
+
+```sh
+curl -sS http://127.0.0.1:8787/api/v1/score \
+  -H "Authorization: Bearer $FG_CLIENT_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"event_id":"evt-unique-001","profile_ref":"opaque-profile-7","provider":"ollama","model":"qwen3-0.6b","timestamp":"2026-11-15T11:00:00Z","input_tokens":120,"output_tokens":64,"failed":false}'
+```
+
+Use a current UTC timestamp for live calls; the example timestamp is illustrative. Keep `FG_CLIENT_KEY` private and out of source control. The service binds to loopback by default. For remote use, put it behind HTTPS, provision independent high-entropy keys for each tenant, and apply deployment-level network protection. The current build supports static key-hash-to-tenant mappings configured at startup; it does not provide an API-key issuance portal, paid plans, TLS termination, email/SMS alerts, or persistence for behavior profiles. Profiles and idempotency records are process-local and reset on restart.
+
+The API enforces a configurable per-tenant request limit (`FRAUDGUARD_API_REQUESTS_PER_MINUTE`, default 120), request-size and field limits, a 10-minute idempotency window keyed by tenant plus event ID, and strict rejection of prompt/payload fields. Health is available at `GET /healthz` and reveals only `{"status":"ok"}`. The service does not trust IP headers for identity.
+
+### Host integration boundary
+
+Brief or another host must call the endpoint from its server, not expose its FraudGuard API key to browser code. It must send a stable pseudonymous `profile_ref` and trusted request metadata after the model call completes. The current public Brief repository is not wired to this endpoint; adding the server-side client and showing findings in Brief remains a separate integration step. Keep the service and host profiles aligned to the same tenant/API-key mapping, and do not send prompts, response bodies, user email addresses, raw provider keys, or client-supplied identity headers.
+
 ```go
 plugin, err := fraudguard.New(fraudguard.Config{
     WarmupRequests:      8,

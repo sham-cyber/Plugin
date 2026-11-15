@@ -293,3 +293,13 @@ GitHub Actions remain pending and were not started. A workflow draft exists on t
 - Demo scoring output (score 30 rapid-sequence sample, synthetic payment and key-status samples, and synthetic multi-turn context sample) came from local deterministic demo data, not live gateway storage. No authenticated host admin listener or live metrics endpoint was configured or queried.
 - The temporary stack and worktree were removed after the successful run. This proves local compatibility with the pinned Bifrost commit only; it does not establish upstream acceptance, production readiness, real-provider connectivity, multi-replica behavior, production alert delivery, or gateway latency guarantees.
 - No GitHub push was made. GitHub Actions remain pending and were not started.
+
+## 23. Standalone authenticated scoring API (2026-11-15)
+
+- Archived the pre-API `plugins/fraudguard` module as `generated-artifacts/fraudguard-bifrost-backup-2026-11-15.tar.gz`; its SHA-256 file is alongside it. The generated-artifacts directory is ignored by Git.
+- Added a standalone Go HTTP service that reuses the same in-memory engine without changing the Bifrost plugin hooks or upstream Bifrost files. `POST /api/v1/score` requires a bearer API key whose SHA-256 digest maps to an opaque tenant reference, accepts only strict request metadata, applies per-tenant request limits and bounded idempotency, and returns an observe-only score and named signals. `GET /healthz` exposes only a basic status.
+- `GOSUMDB=sum.golang.org go test -race ./...` passed for the FraudGuard module. Targeted `go vet` and `go build` passed for the core engine, HTTP API, and HTTP API command packages.
+- A local HTTP smoke test returned health `200`, an authenticated synthetic scoring response with `enforcement: "observe_only"`, and `401` for a request without a bearer key. The response was a warmup result; no live customer traffic was used.
+- A full `go vet ./...` invocation does not work for the dynamic shared-object adapter as a normal executable package; that adapter is built with Bifrost's `-buildmode=plugin` path. The standalone API and core packages were vetted separately.
+- The service is not deployed publicly, has no TLS termination or API-key issuance portal, and is not connected to Brief. Profiles and idempotency state are process-local and reset on restart. No production-readiness or paid-service claim is made.
+- No GitHub Actions workflow was run or started, and no Git push was made.
