@@ -8,6 +8,14 @@ This is a hackathon project: an observe-only Go plugin for Bifrost, with a synth
 
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
+## Brief application integration
+
+The Brief app now has an opt-in route for sending its Qwen summary requests through Bifrost. Tavily search remains direct, and Ollama remains the default unless the Brief operator sets `BRIEF_AI_PROVIDER=bifrost` and configures `BIFROST_BASE_URL`, `BIFROST_MODEL`, and `BIFROST_VIRTUAL_KEY` in the Brief API server environment. Brief sends the server-side virtual key in Bifrost's `x-bf-vk` header.
+
+When FraudGuard is loaded in that Bifrost server, it can observe the summary requests and report findings through its configured finding output. It remains observe-only: requests are not blocked or changed. The first integration uses one shared virtual key for the Brief deployment, so FraudGuard sees app-level behavior rather than separate profiles for each Brief member. Brief does not yet show FraudGuard findings in its own screen.
+
+This is an integration in the separate Brief repository; it does not modify or add FraudGuard to upstream Bifrost. No live Brief-to-Bifrost connection was tested because no gateway address or virtual key was configured. The integration code and its mocked tests are available in the [Brief commit](https://github.com/sham-cyber/Brief/commit/692cb99fc276bd689543bae2636ff55dc0c0c84b).
+
 ## Hackathon problem, solution, and verification
 
 ### 1. Problem context in the inspected Bifrost source
