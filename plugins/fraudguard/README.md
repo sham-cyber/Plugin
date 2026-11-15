@@ -176,13 +176,56 @@ curl -sS http://127.0.0.1:8787/api/v1/score \
   -d '{"event_id":"evt-unique-001","profile_ref":"opaque-profile-7","provider":"ollama","model":"qwen3-0.6b","timestamp":"2026-11-15T11:00:00Z","input_tokens":120,"output_tokens":64,"failed":false}'
 ```
 
+Try the v2 model event endpoint with a current timestamp:
+
+```sh
+curl -sS http://127.0.0.1:8787/api/v2/events \
+  -H "Authorization: Bearer $FG_CLIENT_KEY" \
+  -H "Content-Type: application/json" \
+  -d "{\"event_id\":\"evt-model-002\",\"attempt_id\":\"attempt-model-002\",\"profile_ref\":\"opaque-profile-7\",\"operation\":\"model_summary\",\"event_type\":\"completion\",\"timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"status\":\"completed\",\"provider\":\"ollama\",\"model\":\"qwen3-0.6b\",\"input_tokens\":120,\"output_tokens\":64,\"token_count_source\":\"provider-reported\",\"duration_ms\":245}"
+```
+
+The v2 endpoint responds with HTTP `202`; model and Tavily terminal events include a nested score, while start and citation/guardrail events return `scored: false`.
+
 Use a current UTC timestamp for live calls; the example timestamp is illustrative. Keep `FG_CLIENT_KEY` private and out of source control. The service binds to loopback by default. For remote use, put it behind HTTPS, provision independent high-entropy keys for each tenant, and apply deployment-level network protection. The current build supports static key-hash-to-tenant mappings configured at startup; it does not provide an API-key issuance portal, paid plans, TLS termination, email/SMS alerts, or persistence for behavior profiles. Profiles and idempotency records are process-local and reset on restart.
 
 The API enforces a configurable per-tenant request limit (`FRAUDGUARD_API_REQUESTS_PER_MINUTE`, default 120), request-size and field limits, a 10-minute idempotency window keyed by tenant plus event ID, and strict rejection of prompt/payload fields. Health is available at `GET /healthz` and reveals only `{"status":"ok"}`. The service does not trust IP headers for identity.
 
+### Versioned host event API
+
+`POST /api/v2/events` adds a strict event contract while keeping `/api/v1/score` unchanged. It accepts `model_summary` and `tavily_search` operations with `start`, `completion`, `failure`, `cancellation`, and `citation_guardrail` event types. `event_id` identifies one event; `attempt_id` lets the host relate events from the same attempt. `profile_ref` must be an opaque pseudonym scoped consistently by the host.
+
+Example completed model event:
+
+```json
+{
+  "event_id": "evt-model-001",
+  "attempt_id": "attempt-model-001",
+  "profile_ref": "opaque-profile-7",
+  "operation": "model_summary",
+  "event_type": "completion",
+  "timestamp": "2026-11-15T11:00:00Z",
+  "status": "completed",
+  "provider": "ollama",
+  "model": "qwen3-0.6b",
+  "input_tokens": 120,
+  "output_tokens": 64,
+  "token_count_source": "provider-reported",
+  "duration_ms": 245
+}
+```
+
+For model events, `token_count_source` is `provider-reported`, `estimated`, or `unavailable`. When unavailable, omit both token counts. Tavily events use `provider: "tavily"`, omit `model` and token fields, and include `duration_ms` and `result_count` on completed searches. Citation/guardrail events use `validation_outcome` and matching `status` values `passed`, `failed`, or `not_run`.
+
+The receiver enforces a 4 KiB body limit, identifier and provider/model label formats, timestamps no more than 24 hours old or 2 minutes in the future, durations from 0 through 600,000 ms, result counts from 0 through 1,000, and token counts from 0 through 100,000,000. Unknown fields are rejected. Event IDs are idempotent for 10 minutes per tenant; reusing an ID with different content returns `409 event_id_conflict`.
+
+The `202` response includes `accepted`, `scored`, `enforcement: "observe_only"`, and a score when one was produced. Terminal model and Tavily events are scored for the behavior signals currently supported by the engine. Tavily duration and result-count values are validated but are not yet scoring signals. Start and citation/guardrail events are acknowledged without a score and are not retained as event history; `attempt_id` is not correlated across calls by the receiver. These limits are intentional and should not be described as full lifecycle analytics. Sender-side queue drops must be measured by the host; this synchronous receiver cannot count events it never receives.
+
+The v2 endpoint does not accept prompts, search queries, URLs, source snippets, PINs, credentials, or arbitrary validation text. Keep the client key server-side. A host should send events asynchronously and fail-open so FraudGuard delivery cannot delay or alter the AI response.
+
 ### Host integration boundary
 
-Brief or another host must call the endpoint from its server, not expose its FraudGuard API key to browser code. It must send a stable pseudonymous `profile_ref` and trusted request metadata after the model call completes. The current public Brief repository is not wired to this endpoint; adding the server-side client and showing findings in Brief remains a separate integration step. Keep the service and host profiles aligned to the same tenant/API-key mapping, and do not send prompts, response bodies, user email addresses, raw provider keys, or client-supplied identity headers.
+Brief or another host must call the endpoint from its server, not expose its FraudGuard API key to browser code. It must send a stable pseudonymous `profile_ref` and trusted request metadata. The current Brief bridge is a separate local change and is not live-enabled or tested against this receiver. Keep the service and host profiles aligned to the same tenant/API-key mapping, and do not send prompts, response bodies, search queries, URLs, source snippets, user email addresses, raw provider keys, or client-supplied identity headers.
 
 ```go
 plugin, err := fraudguard.New(fraudguard.Config{

@@ -28,6 +28,7 @@ import (
 
 const (
 	ScorePath                = "/api/v1/score"
+	EventsPath               = "/api/v2/events"
 	HealthPath               = "/healthz"
 	maxRequestBytes          = 4096
 	maxAPIKeys               = 1000
@@ -88,6 +89,7 @@ type Handler struct {
 	rateMu      sync.Mutex
 	rateWindows map[string]rateWindow
 	idempotency *idempotencyStore
+	events      *eventIdempotencyStore
 }
 
 type rateWindow struct {
@@ -116,6 +118,7 @@ func NewHandler(engine *fraudguard.Engine, config Config) (http.Handler, error) 
 		rateLimit:   config.RequestsPerMinute,
 		rateWindows: make(map[string]rateWindow),
 		idempotency: newIdempotencyStore(maxIdempotencyEntries, idempotencyTTL),
+		events:      newEventIdempotencyStore(maxIdempotencyEntries, idempotencyTTL),
 	}
 	for keyHash, tenantRef := range config.KeyHashes {
 		decoded, err := hex.DecodeString(keyHash)
@@ -175,6 +178,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	case ScorePath:
 		h.score(w, r)
+	case EventsPath:
+		h.eventsEndpoint(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "not_found")
 	}

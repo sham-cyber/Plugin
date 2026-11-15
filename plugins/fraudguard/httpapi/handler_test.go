@@ -9,8 +9,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -68,6 +71,26 @@ func postScore(handler http.Handler, body []byte, apiKey string) *httptest.Respo
 	return response
 }
 
+func postEvent(handler http.Handler, body []byte, apiKey string) *httptest.ResponseRecorder {
+	request := httptest.NewRequest(http.MethodPost, EventsPath, bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
+	if apiKey != "" {
+		request.Header.Set("Authorization", "Bearer "+apiKey)
+	}
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, request)
+	return response
+}
+
+func eventFixture(t *testing.T, name string) []byte {
+	t.Helper()
+	body, err := os.ReadFile("testdata/" + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return []byte(strings.ReplaceAll(string(body), "__TEST_TIMESTAMP__", time.Now().UTC().Format(time.RFC3339Nano)))
+}
+
 func TestScoreRequiresBearerAPIKey(t *testing.T) {
 	handler := newTestHandler(t, 100)
 	body := scoreBody(t, "event-1", "openai", "model-a", time.Now().UTC())
@@ -76,6 +99,205 @@ func TestScoreRequiresBearerAPIKey(t *testing.T) {
 		if response.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d, want 401", response.Code)
 		}
+	}
+}
+
+func TestEventsRequireBearerAPIKey(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	body := eventFixture(t, "model_completion.json")
+	for _, key := range []string{"", "wrong-key"} {
+		response := postEvent(handler, body, key)
+		if response.Code != http.StatusUnauthorized {
+			t.Fatalf("status = %d, want 401", response.Code)
+		}
+	}
+}
+
+func TestEventsAcceptModelAndTavilyFixtures(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	for _, name := range []string{"model_completion.json", "tavily_completion.json"} {
+		response := postEvent(handler, eventFixture(t, name), testAPIKey)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("%s status = %d, body=%s", name, response.Code, response.Body.String())
+		}
+		var result EventResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if result.SchemaVersion != eventSchemaVersion || !result.Accepted ||
+			!result.Scored || result.Score == nil || result.Enforcement != "observe_only" {
+			t.Fatalf("%s response = %+v", name, result)
+		}
+		if result.EventID == "" || result.AttemptID == "" {
+			t.Fatalf("%s omitted event correlation identifiers: %+v", name, result)
+		}
+		for _, privateValue := range []string{testAPIKey, "profile-private-opaque"} {
+			if bytes.Contains(response.Body.Bytes(), []byte(privateValue)) {
+				t.Fatalf("%s response exposed private value %q", name, privateValue)
+			}
+		}
+	}
+}
+
+func TestEventsAcknowledgeLifecycleAndGuardrailWithoutScoring(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	for _, body := range [][]byte{
+		[]byte(`{"event_id":"start-event","attempt_id":"attempt-1","profile_ref":"profile-1","operation":"model_summary","event_type":"start","timestamp":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","status":"started","provider":"ollama","model":"qwen3-0.6b"}`),
+		[]byte(`{"event_id":"guardrail-event","attempt_id":"attempt-1","profile_ref":"profile-1","operation":"model_summary","event_type":"citation_guardrail","timestamp":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","status":"passed","provider":"ollama","model":"qwen3-0.6b","validation_outcome":"passed"}`),
+	} {
+		response := postEvent(handler, body, testAPIKey)
+		if response.Code != http.StatusAccepted {
+			t.Fatalf("status = %d, body=%s", response.Code, response.Body.String())
+		}
+		var result EventResponse
+		if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil {
+			t.Fatal(err)
+		}
+		if !result.Accepted || result.Scored || result.Score != nil || result.Enforcement != "observe_only" {
+			t.Fatalf("non-terminal event response = %+v", result)
+		}
+	}
+}
+
+func TestEventsRejectUnknownContentFieldsWithoutEchoingThem(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	for _, body := range [][]byte{
+		[]byte(`{"event_id":"event-1","attempt_id":"attempt-1","profile_ref":"profile-1","operation":"model_summary","event_type":"completion","timestamp":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","status":"completed","provider":"ollama","model":"qwen3-0.6b","input_tokens":1,"output_tokens":1,"token_count_source":"provider-reported","duration_ms":3,"prompt":"never accept this text"}`),
+		[]byte(`{"event_id":"event-2","attempt_id":"attempt-2","profile_ref":"profile-1","operation":"tavily_search","event_type":"completion","timestamp":"` + time.Now().UTC().Format(time.RFC3339Nano) + `","status":"completed","provider":"tavily","duration_ms":10,"result_count":2,"query":"private search words"}`),
+	} {
+		response := postEvent(handler, body, testAPIKey)
+		if response.Code != http.StatusBadRequest {
+			t.Fatalf("status = %d, want 400; body=%s", response.Code, response.Body.String())
+		}
+		for _, privateValue := range []string{"never accept this text", "private search words"} {
+			if bytes.Contains(response.Body.Bytes(), []byte(privateValue)) {
+				t.Fatalf("error response echoed forbidden input %q", privateValue)
+			}
+		}
+	}
+}
+
+func TestEventsValidateContractLimits(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	valid := eventFixture(t, "tavily_completion.json")
+	cases := []struct {
+		name   string
+		code   int
+		mutate func(*EventRequest)
+	}{
+		{
+			name: "duration too large", code: http.StatusBadRequest,
+			mutate: func(input *EventRequest) {
+				value := int64(600001)
+				input.DurationMS = &value
+			},
+		},
+		{
+			name: "result count too large", code: http.StatusBadRequest,
+			mutate: func(input *EventRequest) {
+				value := int64(1001)
+				input.ResultCount = &value
+			},
+		},
+		{
+			name: "wrong status", code: http.StatusBadRequest,
+			mutate: func(input *EventRequest) { input.Status = "failed" },
+		},
+		{name: "valid completion", code: http.StatusAccepted},
+	}
+	for index, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			var input EventRequest
+			if err := json.Unmarshal(valid, &input); err != nil {
+				t.Fatal(err)
+			}
+			input.EventID = fmt.Sprintf("limit-event-%d", index)
+			if test.mutate != nil {
+				test.mutate(&input)
+			}
+			body, err := json.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := postEvent(handler, body, testAPIKey)
+			if response.Code != test.code {
+				t.Fatalf("status = %d, want %d; body=%s", response.Code, test.code, response.Body.String())
+			}
+		})
+	}
+}
+
+func TestEventsAreIdempotentAndRejectEventIDReuse(t *testing.T) {
+	handler := newTestHandler(t, 100)
+	body := eventFixture(t, "model_completion.json")
+	first := postEvent(handler, body, testAPIKey)
+	second := postEvent(handler, body, testAPIKey)
+	if first.Code != http.StatusAccepted || second.Code != http.StatusAccepted {
+		t.Fatalf("statuses = %d, %d", first.Code, second.Code)
+	}
+	var firstResult, secondResult EventResponse
+	if err := json.Unmarshal(first.Body.Bytes(), &firstResult); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(second.Body.Bytes(), &secondResult); err != nil {
+		t.Fatal(err)
+	}
+	if firstResult.Deduplicated || !secondResult.Deduplicated ||
+		firstResult.Score == nil || secondResult.Score == nil ||
+		firstResult.Score.RiskScore != secondResult.Score.RiskScore {
+		t.Fatalf("unexpected idempotency results: first=%+v second=%+v", firstResult, secondResult)
+	}
+
+	var changed EventRequest
+	if err := json.Unmarshal(body, &changed); err != nil {
+		t.Fatal(err)
+	}
+	changed.Model = "different-model"
+	changedBody, err := json.Marshal(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conflict := postEvent(handler, changedBody, testAPIKey)
+	if conflict.Code != http.StatusConflict || !bytes.Contains(conflict.Body.Bytes(), []byte("event_id_conflict")) {
+		t.Fatalf("reused event ID status=%d body=%s", conflict.Code, conflict.Body.String())
+	}
+}
+
+func TestConcurrentDuplicateEventsAreScoredOnce(t *testing.T) {
+	handler := newTestHandler(t, 1000)
+	body := eventFixture(t, "model_completion.json")
+	const callers = 12
+	results := make([]EventResponse, callers)
+	statuses := make([]int, callers)
+	var wg sync.WaitGroup
+	for index := range callers {
+		wg.Add(1)
+		go func(index int) {
+			defer wg.Done()
+			response := postEvent(handler, body, testAPIKey)
+			statuses[index] = response.Code
+			if response.Code == http.StatusAccepted {
+				if err := json.Unmarshal(response.Body.Bytes(), &results[index]); err != nil {
+					t.Errorf("decode response: %v", err)
+				}
+			}
+		}(index)
+	}
+	wg.Wait()
+	nonDuplicateResponses := 0
+	for index, result := range results {
+		if statuses[index] != http.StatusAccepted || !result.Accepted || result.Score == nil {
+			t.Fatalf("call %d status=%d result=%+v", index, statuses[index], result)
+		}
+		if !result.Deduplicated {
+			nonDuplicateResponses++
+		}
+		if result.Score.RiskScore != results[0].Score.RiskScore {
+			t.Fatalf("call %d risk score=%d, want %d", index, result.Score.RiskScore, results[0].Score.RiskScore)
+		}
+	}
+	if nonDuplicateResponses != 1 {
+		t.Fatalf("non-duplicate responses=%d, want exactly 1", nonDuplicateResponses)
 	}
 }
 

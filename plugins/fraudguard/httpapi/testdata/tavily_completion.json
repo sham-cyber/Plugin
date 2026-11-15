@@ -1,0 +1,12 @@
+{
+  "event_id": "evt-search-001",
+  "attempt_id": "attempt-search-001",
+  "profile_ref": "profile-private-opaque",
+  "operation": "tavily_search",
+  "event_type": "completion",
+  "timestamp": "__TEST_TIMESTAMP__",
+  "status": "completed",
+  "provider": "tavily",
+  "duration_ms": 245,
+  "result_count": 4
+}
