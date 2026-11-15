@@ -225,7 +225,7 @@ The v2 endpoint does not accept prompts, search queries, URLs, source snippets, 
 
 ### Host integration boundary
 
-Brief or another host must call the endpoint from its server, not expose its FraudGuard API key to browser code. It must send a stable pseudonymous `profile_ref` and trusted request metadata. The current Brief bridge is a separate local change and is not live-enabled or tested against this receiver. Keep the service and host profiles aligned to the same tenant/API-key mapping, and do not send prompts, response bodies, search queries, URLs, source snippets, user email addresses, raw provider keys, or client-supplied identity headers.
+Brief or another host must call the endpoint from its server, not expose its FraudGuard API key to browser code. It must send a stable pseudonymous `profile_ref` and trusted request metadata. The current Brief bridge is a separate local, disabled change; it still needs to be aligned to the v2 contract and extended for Tavily events. It has not been committed to the Brief repository or live-tested against this receiver. Keep the service and host profiles aligned to the same tenant/API-key mapping, and do not send prompts, response bodies, search queries, URLs, source snippets, user email addresses, raw provider keys, or client-supplied identity headers.
 
 ```go
 plugin, err := fraudguard.New(fraudguard.Config{
