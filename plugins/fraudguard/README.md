@@ -339,19 +339,32 @@ Payment velocity counts each trusted `RecordPayment` call. Deduplicating retried
 
 ### Optional host-model review
 
-AI review is off by default. When enabled, `AIAnalyzer` and `OnAIReview` are required. The adapter receives only `AIAnalysisInput` fields: deterministic score/threshold, alert/warmup flags, and fixed signals. It does not receive prompt or payload text, identifiers, or provider/model labels. This is an AI interpretation of existing signals, not an independent detector; it cannot discover patterns the deterministic rules did not identify. Reviews are queued asynchronously only when the score reaches `AIAnalysisMinScore` (default: `AlertThreshold`); the bounded queue and worker count default to 64 items and one worker. The model timeout defaults to five seconds.
+AI review is off by default. The main detector always makes its deterministic score first. When enabled for the dynamic `.so`, a bounded background worker sends only the score, threshold, warmup/alert flags, and fixed signal names/weights to the host's OpenAI-compatible Bifrost endpoint. It never sends prompt or payload text, provider/model labels, tenant or key identifiers, or credentials. The result is a separate advisory; it cannot change the score or request flow and cannot discover signals that the Go rules did not find.
 
-```go
-plugin, err := fraudguard.New(fraudguard.Config{
-    EnableAIAnalysis: true,
-    AIAnalyzer:       hostModelAdapter, // host-defined implementation using an isolated Bifrost client
-    OnAIReview: func(event fraudguard.AIReviewEvent) {
-        // Store or display this advisory separately from the deterministic finding.
-    },
-})
+To enable it, set `enable_ai_analysis` in the Bifrost plugin config and configure a dedicated Bifrost virtual key and model alias. Provide these values in the Bifrost host's environment or secrets manager, not in Git or a config file:
+
+```sh
+FRAUDGUARD_AI_REVIEW_ENDPOINT=http://127.0.0.1:8080/v1/chat/completions
+FRAUDGUARD_AI_REVIEW_MODEL=<configured-bifrost-model-alias>
+FRAUDGUARD_AI_REVIEW_API_KEY=<secret-bifrost-virtual-key>
+FRAUDGUARD_AI_REVIEW_VIRTUAL_KEY_ID=<resolved-internal-key-id>
 ```
 
-The host adapter should honor its context timeout and use a Bifrost client that does not register FraudGuard, or the model request could recursively trigger analysis. The plugin has no direct model client and never reads or stores provider credentials. The standalone demo and tests do not contact a live model; tests use a local test adapter. Call `Cleanup` to drain and stop AI review workers. AI confidence is descriptive, not a calibrated fraud probability.
+Use HTTPS for a remote Bifrost host; plain HTTP is accepted only for loopback. The virtual-key ID must be the resolved internal ID for this dedicated service key. The dynamic adapter adds that ID to FraudGuard's exemptions so an AI review request cannot recursively trigger another review. The service key still remains subject to other Bifrost controls. The key value is held in memory for the adapter and is never logged.
+
+Example plugin configuration:
+
+```json
+{
+  "enable_ai_analysis": true,
+  "ai_analysis_min_score": 60,
+  "ai_analysis_timeout": "5s"
+}
+```
+
+Reviews are queued asynchronously only when the score reaches `AIAnalysisMinScore`; the bounded queue and worker count default to 64 items and one worker. A failed, timed-out, or invalid model response increments a metric and does not affect the original request. A model call uses the host's configured Bifrost model and may incur its normal provider charges.
+
+The module also exposes `AIAnalyzer` and `OnAIReview` for direct Go hosts that already have a separately isolated Bifrost client. Both routes use the same sanitized input contract. `go run ./cmd/demo --ai-review` opts into one synthetic review using the environment above; ordinary demo and test commands make no external calls. AI confidence is descriptive, not a calibrated fraud probability.
 
 The allowlist accepts internal virtual-key **IDs**, not virtual-key secrets. IDs are HMACed at initialization and never retained in clear text by the engine. Do not populate it with bearer tokens.
 
@@ -430,7 +443,7 @@ Configure Bifrost's custom plugin entry with the generated file path:
 }
 ```
 
-The Bifrost executable and `.so` must be built for the same OS, architecture, libc, and exact Go version (1.27.3 for the pinned source). Build Bifrost without `-extldflags '-static'` and without the `sqlite_static` build tag. Go plugins are supported on Linux and macOS, not Windows. Plugin AI review remains disabled unless a host-specific adapter is provided through a direct Go integration; a JSON config cannot inject callbacks.
+The Bifrost executable and `.so` must be built for the same OS, architecture, libc, and exact Go version (1.27.3 for the pinned source). Build Bifrost without `-extldflags '-static'` and without the `sqlite_static` build tag. Go plugins are supported on Linux and macOS, not Windows. The dynamic adapter can enable optional AI review through the environment-backed Bifrost endpoint described above; a JSON config alone cannot provide the host URL or secret.
 
 The Go loader caches a shared object per process. This adapter supports Bifrost's normal plugin reload lifecycle, but it is designed for one active FraudGuard configuration per Bifrost process; do not load the same `.so` as separate isolated instances in one process.
 
@@ -525,7 +538,7 @@ From this directory:
 go run ./cmd/demo
 ```
 
-The demo warms a key with five requests 30 seconds apart, then simulates another request after one second. It also supplies synthetic payment events and trusted key-status booleans to the optional signal APIs. It prints observe-only findings and aggregate metrics; it does not enable AI review or call an external service.
+The default demo warms a key with five requests 30 seconds apart, then simulates another request after one second. It also supplies synthetic payment events and trusted key-status booleans to the optional signal APIs. It prints observe-only findings and aggregate metrics without network calls. To optionally ask the configured Bifrost host model to review the synthetic behavior finding, run `go run ./cmd/demo --ai-review`; this sends only synthetic scores and fixed signal names, and may incur model-provider charges.
 
 Expected synthetic signals include `rapid_sequence`, `payment_new_location`, `payment_velocity`, and the separate `key_expired`, `key_revoked`, and `key_exposed` signals.
 
@@ -537,7 +550,7 @@ go test -race ./...
 go vet ./...
 ```
 
-Tests cover benign baselines, below-rate-limit anomalies, warmup, deterministic scores/reasons, token spikes, repeated failures, prompt/context-check opt-in and scan bounds, prompt privacy, concurrent requests/payment/AI reviews, expiry and profile bounds, exemptions, threshold behavior, tenant plan overrides, Redis usage idempotency, tier evaluation, usage exports, audit signatures, webhook target validation, hot reload/rejection/recovery, Prometheus output, OpenTelemetry instrument registration, admin authorization, Redis circuit transitions, and concurrent config updates. `main_test.go` sends a request through Bifrost's real core plugin pipeline to a local mock HTTP provider and verifies that an alerting prompt anomaly still reaches the provider. It does not start Bifrost's inbound HTTP gateway server; the separate overlay test checks the pinned server loader and hook pass-through. Redis behavior is tested with miniredis and local unavailable-port fixtures; no live Redis, webhook endpoint, billing provider, or AI model is contacted.
+Tests cover benign baselines, below-rate-limit anomalies, warmup, deterministic scores/reasons, token spikes, repeated failures, prompt/context-check opt-in and scan bounds, prompt privacy, concurrent requests/payment/AI reviews, expiry and profile bounds, exemptions, threshold behavior, tenant plan overrides, Redis usage idempotency, tier evaluation, usage exports, audit signatures, webhook target validation, hot reload/rejection/recovery, Prometheus output, OpenTelemetry instrument registration, admin authorization, Redis circuit transitions, and concurrent config updates. The AI HTTP adapter is tested against a local mock Bifrost-compatible endpoint, including privacy, response validation, and redirect protections; no live model is contacted by the tests. `main_test.go` sends a request through Bifrost's real core plugin pipeline to a local mock HTTP provider and verifies that an alerting prompt anomaly still reaches the provider. It does not start Bifrost's inbound HTTP gateway server; the separate overlay test checks the pinned server loader and hook pass-through. Redis behavior is tested with miniredis and local unavailable-port fixtures; no live Redis, webhook endpoint, billing provider, or AI model is contacted.
 
 Run `make fraudguard-fuzz-smoke` for bounded local Go fuzzing of runtime-config decoding and the context scanner. It runs each target for three seconds by default; set `FUZZTIME=15s` for a longer pass. These tests do not contact external services or start GitHub Actions.
 
@@ -599,7 +612,7 @@ The numerical rules are intentionally simple and inspectable; they are not calib
 - Failed requests observed before a response contribute to the error signal only if Bifrost runs this plugin's post-hook for that request.
 - Cross-key correlation depends on Bifrost supplying a resolved authenticated user identity; it does not infer relationships between keys from headers or network addresses.
 - Periodic profile expiration is available via `Engine.Prune`; profile count is also bounded with oldest-profile eviction.
-- The Go plugin module has no live tenant-facing dashboard, provider-specific AI client, payment processor, billing API, or email/SMS delivery. AI review requires a host-supplied adapter and is disabled by default. The separate company-facing page in this project remains a synthetic visual prototype with no live tenant/subscription system or plugin feed.
+- The Go plugin module has no live tenant-facing dashboard, provider-specific AI client, payment processor, billing API, or email/SMS delivery. Optional AI review is disabled by default; its Bifrost endpoint adapter requires explicit host configuration, a dedicated service virtual key, and a model alias. The separate company-facing page in this project remains a synthetic visual prototype with no live tenant/subscription system or plugin feed.
 - The Redis usage ledger and audit stream are optional product services, not a shared behavioral profile store. Redis outages or queue overflow can leave usage/audit data incomplete; monitor `ProductMetrics` and do not use this ledger as the sole financial source of truth.
 - Trusted internal-key threat indicators and budget warnings are optional advisory helpers. They do not use IP/user-agent fingerprints, do not perform external feed lookups, and do not block requests. Budget estimates require host-supplied trusted pricing and usage data.
 - `docker-compose.yml` can build a local Bifrost image from the pinned source with the local integration overlay and a synthetic provider. The image build and complete Compose runtime have not been executed as part of this verification; the Compose configuration itself has been validated.

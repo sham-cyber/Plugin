@@ -45,12 +45,12 @@ Direct use through `core.Init` and `schemas.BifrostConfig.LLMPlugins` is documen
 - Optional, default-off checks for common override/jailbreak phrases and a configured user-text byte threshold. Inspection is transient, capped, and limited to user text in supported text request types.
 - A bounded asynchronous finding callback queue with queue-drop and callback-failure metrics; callback panics do not crash the process.
 - Observe-only hooks: findings do not short-circuit, reject, or change a request.
-- Optional AI review, disabled by default, through a Bifrost-host-supplied adapter. It receives only a sanitized deterministic finding and returns a separate advisory; it cannot change the score or request flow.
+- Optional AI review, disabled by default. The dynamic `.so` can call a configured Bifrost chat-completions endpoint asynchronously with only sanitized scores and fixed signal names/weights; it returns a separate advisory and cannot change the score or request flow.
 - AI review interprets existing named signals only; it is not a separate model-based detector and cannot discover patterns absent from the rule-based signals.
 - Optional Redis tenant usage ledger with HMAC-pseudonymized tenant/event references, request/token/fraud-check latency aggregates, and deduplication by event ID. Gateway retry attempts use fresh hook IDs and are not deduplicated by this module.
 - Operator-configured tier policy catalog for alert thresholds, payment velocity, feature entitlements, and usage-limit warning/overage signals. Policy outcomes are informational and never reject requests.
 - Versioned usage export helper with no prices or blocked-request counts, plus HMAC-signed Redis Stream audit records and optional allowlisted HTTPS webhooks.
-- No prompt/payload retention or provider-specific model client. Optional prompt checks inspect bounded user text transiently and retain only a boolean signal and byte count for the current scoring call. The host adapter owns any model call.
+- No prompt/payload retention or provider-specific model client. Optional prompt checks inspect bounded user text transiently and retain only a boolean signal and byte count for the current scoring call. The optional AI adapter contacts only a host-configured Bifrost endpoint.
 
 ## 4. Checks run
 
@@ -73,7 +73,18 @@ Additional tests for the optional AI-review adapter were run on 2026-11-09 with 
 | `GOSUMDB=sum.golang.org go vet ./...` | Passed; no diagnostics. |
 | `GOSUMDB=sum.golang.org go run ./cmd/demo` | Passed; standalone demo keeps AI review disabled and makes no network calls. |
 
-The full suite now also tests privacy-safe AI inputs, score/alert independence, bounded asynchronous queue behavior, timeout/error handling, and concurrent reviews. These tests use a local test adapter; no live host model call was made. The suite also covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, request/payment concurrency, profile/cohort/payment-state bounds and expiry, privacy, exemptions, alert-threshold behavior, independent payment/key-status opt-ins, and observe-only plugin hooks.
+The full suite also tests privacy-safe AI inputs, score/alert independence, bounded asynchronous queue behavior, timeout/error handling, and concurrent reviews. The original tests use an in-process test adapter; no live host model call was made. The suite also covers benign behavior, below-rate-limit anomalies, warmup, deterministic scoring, token spikes, repeated failures, request/payment concurrency, profile/cohort/payment-state bounds and expiry, privacy, exemptions, alert-threshold behavior, independent payment/key-status opt-ins, and observe-only plugin hooks.
+
+### Optional Bifrost host-model review adapter (2026-11-15)
+
+- Added an opt-in HTTP adapter for the host's OpenAI-compatible Bifrost chat-completions endpoint. It sends only the deterministic score, threshold/status flags, and an allowlisted set of signal names and weights; prompts, credentials, labels, and identifiers are excluded. The request runs on the existing bounded background worker and cannot alter request flow.
+- Added environment-based endpoint/model/secret configuration for the dynamic `.so`. A dedicated Bifrost virtual-key ID is automatically exempted from FraudGuard to prevent recursive review calls. Remote endpoints require HTTPS; redirects are not followed.
+- `GOSUMDB=sum.golang.org go test -count=1 ./...` — passed.
+- `GOSUMDB=sum.golang.org go test -race -count=1 ./...` — passed.
+- `GOSUMDB=sum.golang.org go vet ./...` — passed with no diagnostics.
+- `GOSUMDB=sum.golang.org go run ./cmd/demo` — passed; synthetic findings remained observe-only and no AI call was made.
+- The dynamic plugin was rebuilt against the pinned Bifrost checkout. The actual shared-object loader accepted it; reload cleanup and LLM-hook pass-through passed.
+- The adapter tests use a local mock HTTP server. No real Bifrost model endpoint or model credentials were configured, so live model behavior and provider charges were not tested.
 
 ### Additional prompt and callback hardening checks (2026-11-09)
 
@@ -116,7 +127,7 @@ These tests use synthetic text fixtures only. They check optional prompt detecti
 
 - FraudGuard is **not** built into, accepted, or merged into upstream Bifrost.
 - The local source overlay was applied only to a temporary checkout and its server-package test passed. Separately, section 22 records the native `.so` loader and Compose smoke checks. Neither method changes upstream.
-- No live Bifrost-host model adapter was connected or tested; the adapter contract was tested with an in-process test implementation.
+- No live Bifrost model endpoint or real model was configured or tested. The optional HTTP adapter is tested against a local mock endpoint only.
 - No production Redis, webhook endpoint, Stripe/billing engine, multi-replica, or real-customer traffic test was run. Redis and webhooks were tested only with local containers or fixtures.
 - No payment provider or credential-status source is connected; optional payment and key-status signals only run when a trusted host explicitly supplies their inputs.
 - No end-to-end Bifrost gateway latency benchmark was run; local engine microbenchmarks are recorded in section 10, and no sub-30ms target is claimed.

@@ -23,8 +23,10 @@ Bifrost request hook
 - Profiles are process-local, bounded, and expire after inactivity. Redis is not the behavioral profile store.
 - The native `.so` adapter uses Bifrost's existing shared-object loader; it does not add a new loader feature to Bifrost.
 - Findings contain named signals and aggregate metadata, not prompt text, payloads, bearer keys, or raw key IDs.
+- **AI use:** the primary detector is deterministic Go logic. Optional AI review sends only a score, status flags, and fixed signal names/weights to a configured Bifrost chat-completions endpoint in the background. It returns a separate advisory, never changes the score, and never blocks a request. The `--ai-review` demo flag exercises this path with synthetic data when the host endpoint is configured; the normal demo remains offline. This optional model call may incur the host's model-provider charges.
 - Prompt and multi-turn context checks are disabled by default. When enabled, they scan bounded user text transiently and return only fixed signal flags.
 - Payment velocity/location and credential-status checks require trusted host-provided inputs. There is no payment-provider or credential registry connection in this submission.
+- The Bifrost-host AI adapter is opt-in and requires a dedicated virtual key and model alias in deployment configuration. Automated tests use a local mock endpoint; no live model endpoint has been configured or tested for this submission.
 - Redis is optional for product metering/audit services. Health probes can ping the configured store, but an optional Redis outage does not block inference.
 - The health/readiness handler requires host authorization and private mounting. It is not automatically wired into Bifrost's public HTTP routes.
 

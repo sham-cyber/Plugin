@@ -3,7 +3,13 @@
 
 package main
 
-import "testing"
+import (
+	"context"
+	"testing"
+	"time"
+
+	"github.com/maximhq/bifrost/plugins/fraudguard"
+)
 
 func TestBuildDemoReportUsesFraudGuardEngine(t *testing.T) {
 	report, _, err := buildDemoReport()
@@ -45,5 +51,36 @@ func TestBuildDemoReportUsesFraudGuardEngine(t *testing.T) {
 		if !foundSignal {
 			t.Errorf("%s finding missing signal %q: %+v", result.ID, expected.signal, result.Finding.Signals)
 		}
+	}
+}
+
+func TestBuildDemoReportCanUseOptionalAIReview(t *testing.T) {
+	reviews := make(chan fraudguard.AIReviewEvent, 1)
+	analyzer := fraudguard.AIAnalyzerFunc(func(_ context.Context, input fraudguard.AIAnalysisInput) (fraudguard.AIAnalysisResult, error) {
+		if input.Score != 30 || len(input.Signals) == 0 {
+			t.Errorf("AI adapter received an unexpected synthetic finding: %+v", input)
+		}
+		return fraudguard.AIAnalysisResult{
+			Conclusion:  fraudguard.AIConclusionReviewSuggested,
+			Confidence:  70,
+			Explanation: "Synthetic behavior signals merit review.",
+		}, nil
+	})
+	report, _, err := buildDemoReportWithAI(analyzer, "demo-review-key-id", func(event fraudguard.AIReviewEvent) {
+		reviews <- event
+	})
+	if err != nil {
+		t.Fatalf("build AI demo report: %v", err)
+	}
+	select {
+	case event := <-reviews:
+		if event.Analysis.Conclusion != fraudguard.AIConclusionReviewSuggested {
+			t.Fatalf("unexpected AI advisory: %+v", event.Analysis)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("synthetic demo did not invoke the optional AI adapter")
+	}
+	if len(report.Cases) != 4 || report.Cases[0].Finding.Score != 30 {
+		t.Fatalf("AI review changed the deterministic demo findings: %+v", report.Cases)
 	}
 }

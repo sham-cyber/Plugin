@@ -8,7 +8,6 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log"
 	"reflect"
@@ -33,7 +32,13 @@ func Init(rawConfig any) error {
 		return err
 	}
 	if config.EnableAIAnalysis {
-		return errors.New("fraudguard: dynamic plugin AI review needs a host-supplied AIAnalyzer; disable it or use the direct Go integration")
+		analyzer, reviewKeyID, err := fraudguard.NewBifrostHTTPAIAnalyzerFromEnvironment(config.AIAnalysisTimeout)
+		if err != nil {
+			return err
+		}
+		config.AIAnalyzer = analyzer
+		config.ExemptVirtualKeyIDs = appendUnique(config.ExemptVirtualKeyIDs, reviewKeyID)
+		config.OnAIReview = logAIReview
 	}
 	if config.OnFinding == nil {
 		config.OnFinding = logFinding
@@ -60,6 +65,15 @@ func Init(rawConfig any) error {
 		}
 	}
 	return nil
+}
+
+func appendUnique(values []string, value string) []string {
+	for _, existing := range values {
+		if strings.TrimSpace(existing) == value {
+			return values
+		}
+	}
+	return append(values, value)
 }
 
 // GetName is required by Bifrost's shared-object loader.
@@ -132,6 +146,12 @@ func logFinding(finding fraudguard.Finding) {
 	// requests, prompts, virtual-key values, or tenant identifiers here.
 	log.Printf("FraudGuard observe-only alert: score=%d threshold=%d signals=%v",
 		finding.Score, finding.Threshold, names)
+}
+
+func logAIReview(event fraudguard.AIReviewEvent) {
+	log.Printf("FraudGuard AI advisory: score=%d conclusion=%s confidence=%d explanation=%q",
+		event.Finding.Score, event.Analysis.Conclusion, event.Analysis.Confidence,
+		event.Analysis.Explanation)
 }
 
 // decodeConfig accepts Bifrost's JSON config map using snake_case field names.

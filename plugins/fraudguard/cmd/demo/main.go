@@ -21,20 +21,46 @@ type demoCase struct {
 }
 
 type demoReport struct {
-	Source      string     `json:"source"`
-	Synthetic   bool       `json:"synthetic"`
-	GeneratedAt time.Time  `json:"generated_at"`
-	Cases       []demoCase `json:"cases"`
+	Source      string                    `json:"source"`
+	Synthetic   bool                      `json:"synthetic"`
+	GeneratedAt time.Time                 `json:"generated_at"`
+	Cases       []demoCase                `json:"cases"`
+	AIReview    *fraudguard.AIReviewEvent `json:"ai_review,omitempty"`
 }
 
 func main() {
 	jsonOutput := flag.Bool("json", false, "write the detector output as JSON for the local demo API")
+	aiReview := flag.Bool("ai-review", false, "send the synthetic finding to the configured Bifrost host model")
 	flag.Parse()
 
-	report, metrics, err := buildDemoReport()
+	var analyzer fraudguard.AIAnalyzer
+	var reviewKeyID string
+	reviews := make(chan fraudguard.AIReviewEvent, 1)
+	if *aiReview {
+		var err error
+		analyzer, reviewKeyID, err = fraudguard.NewBifrostHTTPAIAnalyzerFromEnvironment(5 * time.Second)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "could not configure the optional Bifrost AI review")
+			os.Exit(1)
+		}
+	}
+	report, metrics, err := buildDemoReportWithAI(analyzer, reviewKeyID, func(event fraudguard.AIReviewEvent) {
+		select {
+		case reviews <- event:
+		default:
+		}
+	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "could not run FraudGuard demo")
 		os.Exit(1)
+	}
+	if *aiReview {
+		select {
+		case result := <-reviews:
+			report.AIReview = &result
+		default:
+			fmt.Fprintln(os.Stderr, "AI review did not return an advisory; the deterministic demo result is still available")
+		}
 	}
 
 	if *jsonOutput {
@@ -64,10 +90,36 @@ func main() {
 		fmt.Printf("%s: score=%d alert=%t signals=%v\n",
 			label, result.Finding.Score, result.Finding.Alert, signalNames(result.Finding.Signals))
 	}
+	if report.AIReview != nil {
+		fmt.Printf("optional AI advisory: conclusion=%s confidence=%d explanation=%q\n",
+			report.AIReview.Analysis.Conclusion,
+			report.AIReview.Analysis.Confidence,
+			report.AIReview.Analysis.Explanation)
+	} else if *aiReview {
+		fmt.Println("optional AI advisory: unavailable; deterministic observe-only findings are unchanged")
+	}
 }
 
 func buildDemoReport() (demoReport, fraudguard.Metrics, error) {
-	engine, err := fraudguard.NewEngine(fraudguard.Config{WarmupRequests: 4, AlertThreshold: 60})
+	return buildDemoReportWithAI(nil, "", nil)
+}
+
+func buildDemoReportWithAI(
+	analyzer fraudguard.AIAnalyzer,
+	reviewKeyID string,
+	onAIReview func(fraudguard.AIReviewEvent),
+) (demoReport, fraudguard.Metrics, error) {
+	behaviorConfig := fraudguard.Config{WarmupRequests: 4, AlertThreshold: 60}
+	if analyzer != nil {
+		behaviorConfig.EnableAIAnalysis = true
+		behaviorConfig.AIAnalysisMinScore = 1
+		behaviorConfig.AIAnalyzer = analyzer
+		behaviorConfig.OnAIReview = onAIReview
+		if reviewKeyID != "" {
+			behaviorConfig.ExemptVirtualKeyIDs = []string{reviewKeyID}
+		}
+	}
+	engine, err := fraudguard.NewEngine(behaviorConfig)
 	if err != nil {
 		return demoReport{}, fraudguard.Metrics{}, err
 	}

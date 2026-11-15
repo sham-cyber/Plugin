@@ -4,6 +4,8 @@
 package main
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -115,10 +117,40 @@ func TestSharedPluginReloadPreservesReplacementUntilLastCleanup(t *testing.T) {
 	}
 }
 
-func TestSharedPluginRejectsAIWithoutHostAdapter(t *testing.T) {
-	if err := Init(map[string]any{"enable_ai_analysis": true}); err == nil ||
-		!strings.Contains(err.Error(), "host-supplied AIAnalyzer") {
-		t.Fatalf("Init error = %v, want missing host adapter error", err)
+func TestSharedPluginRequiresBifrostAIReviewConfiguration(t *testing.T) {
+	_ = Cleanup()
+	t.Setenv("FRAUDGUARD_AI_REVIEW_ENDPOINT", "")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_MODEL", "")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_API_KEY", "")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_VIRTUAL_KEY_ID", "")
+
+	err := Init(map[string]any{"enable_ai_analysis": true})
+	if err == nil || !strings.Contains(err.Error(), "FRAUDGUARD_AI_REVIEW_ENDPOINT") {
+		t.Fatalf("Init error = %v, want missing Bifrost AI review configuration", err)
+	}
+}
+
+func TestSharedPluginInitializesWithBifrostAIReviewConfiguration(t *testing.T) {
+	_ = Cleanup()
+	t.Cleanup(func() { _ = Cleanup() })
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	t.Setenv("FRAUDGUARD_AI_REVIEW_ENDPOINT", server.URL+"/v1/chat/completions")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_MODEL", "review-model")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_API_KEY", "test-only-host-virtual-key")
+	t.Setenv("FRAUDGUARD_AI_REVIEW_VIRTUAL_KEY_ID", "test-only-internal-key-id")
+
+	if err := Init(map[string]any{"enable_ai_analysis": true, "warmup_requests": float64(1)}); err != nil {
+		t.Fatalf("Init with configured Bifrost AI review: %v", err)
+	}
+	activePlugin.RLock()
+	initialized := activePlugin.instance != nil
+	activePlugin.RUnlock()
+	if !initialized {
+		t.Fatal("plugin was not installed after successful AI adapter setup")
 	}
 }
 
