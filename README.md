@@ -1,4 +1,4 @@
-# FraudGuard: Bifrost behavior-detection plugin
+# FraudGuard: the missing per-key behavior detector in the inspected Bifrost commit
 
 This is a hackathon project: an observe-only Go plugin for Bifrost, with a synthetic demo and a locally verified dynamic-plugin integration. It looks for per-key behavior changes that fixed request-count limits can miss. It reports findings; it never blocks or changes requests. The local checks do not make this an upstream Bifrost feature or a production deployment.
 
