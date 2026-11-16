@@ -8,6 +8,10 @@ This is a hackathon project: an observe-only Go plugin for Bifrost, with a synth
 
 **AshaRatna Tech:** [asharatnatech.com](https://asharatnatech.com). The website is provided as the project company reference; it does not indicate a partnership with Bifrost or a live customer deployment.
 
+## Support this work
+
+If you would like to support the creator, you can choose an amount and pay securely via Razorpay: [Buy me a coffee / support](https://razorpay.me/@suanpower). This is an optional personal support link, not a FraudGuard product payment or subscription.
+
 ## Combined Brief, Bifrost, and FraudGuard project
 
 These are connected components in separate repositories, not one merged application:
